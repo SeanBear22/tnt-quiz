@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TNT Nerds Quiz</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px;
+    }
+
+    h1 {
+      font-size: 2.6em;
+      color: #ffb400;
+      text-shadow: 3px 3px 0 #000;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    p.subtitle {
+      color: #aaa;
+      margin-bottom: 40px;
+      text-align: center;
+    }
+
+    .menu {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .menu a {
+      display: block;
+      text-align: center;
+      background: #16213e;
+      color: #ffffff;
+      border: 3px solid #ffb400;
+      border-radius: 12px;
+      padding: 18px;
+      font-size: 1.3em;
+      font-weight: bold;
+      text-decoration: none;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .menu a:hover {
+      background: #ffb400;
+      color: #1a1a2e;
+      transform: scale(1.03);
+    }
+
+    .menu a.viewerLink {
+      border-color: #555;
+      color: #888;
+    }
+
+    .menu a.viewerLink:hover {
+      background: #333;
+      color: #ccc;
+      transform: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>TNT NERDS QUIZ</h1>
+  <p class="subtitle">Pick your role to get started</p>
+
+  <div class="menu">
+    <a href="/host">Host</a>
+    <a href="/player">Player</a>
+    <a href="/viewer" class="viewerLink">Viewer (coming soon)</a>
+  </div>
+</body>
+</html>

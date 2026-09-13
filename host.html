@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TNT Nerds - Host</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #ffffff;
+      padding: 25px;
+    }
+
+    h1 {
+      font-size: 1.8em;
+      color: #ffb400;
+      text-shadow: 2px 2px 0 #000;
+      margin-bottom: 10px;
+    }
+
+    .topBar {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .topBar input[type="text"] {
+      padding: 8px;
+      font-size: 0.95em;
+      border-radius: 6px;
+      border: none;
+      width: 200px;
+    }
+
+    h2 {
+      color: #ffb400;
+      font-size: 1.2em;
+      margin-bottom: 10px;
+      border-bottom: 2px solid #0f3460;
+      padding-bottom: 5px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+    }
+
+    input[type="text"] {
+      padding: 8px;
+      font-size: 0.95em;
+      border-radius: 6px;
+      border: none;
+      margin-bottom: 8px;
+      width: 100%;
+    }
+
+    .qaRow {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .qaCell {
+      flex: 1;
+      background: #0f3460;
+      border-radius: 6px;
+      padding: 6px;
+    }
+
+    .qaCell input[type="text"] {
+      margin-bottom: 6px;
+    }
+
+    .imgBtn {
+      font-size: 0.75em;
+      padding: 4px 8px;
+    }
+
+    .imgPreviewWrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .imgPreview {
+      max-width: 40px;
+      max-height: 40px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    .removeImgBtn {
+      font-size: 0.75em;
+      padding: 2px 6px;
+      display: none;
+    }
+
+    button {
+      background: #0f3460;
+      color: #fff;
+      border: 2px solid #ffb400;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 0.95em;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .libraryRound {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+    }
+
+    .libraryRound .roundHeaderRow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .libraryRound .roundTitleLabel {
+      font-weight: bold;
+      color: #ffb400;
+      flex: 1;
+      cursor: pointer;
+    }
+
+    .libraryRound .smallBtn {
+      padding: 4px 8px;
+      font-size: 0.8em;
+    }
+
+    .libraryRound .roundQuestions {
+      margin-top: 8px;
+      display: none;
+      font-size: 0.9em;
+      color: #ccc;
+    }
+
+    .libraryRound .roundQuestions.open {
+      display: block;
+    }
+
+    .libraryRound .roundQuestions p {
+      margin: 4px 0;
+    }
+
+    .savedRound {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+    }
+
+    .savedRound .roundHeader {
+      font-weight: bold;
+      color: #ffb400;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .savedRound .roundQuestions {
+      margin-top: 8px;
+      display: none;
+      font-size: 0.9em;
+      color: #ccc;
+    }
+
+    .savedRound .roundQuestions.open {
+      display: block;
+    }
+
+    .savedRound .roundQuestions p {
+      margin: 4px 0;
+    }
+
+    .savedRound.activeRound {
+      border: 2px solid #2ecc71;
+    }
+
+    #currentRoundText {
+      font-size: 1.1em;
+      color: #ffb400;
+      font-weight: bold;
+    }
+
+    #currentQuestionText {
+      font-size: 1.15em;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    #currentAnswerText {
+      color: #2ecc71;
+      font-weight: bold;
+    }
+
+    .playerRow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .playerRow .info {
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .playerRow .name {
+      font-weight: bold;
+      color: #ffb400;
+    }
+
+    .scoreAdjust {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .scoreAdjust button {
+      padding: 4px 10px;
+      font-size: 1em;
+      font-weight: bold;
+    }
+
+    .releaseBtn {
+      background: #e94560;
+      border-color: #e94560;
+    }
+
+    .releaseBtn:hover {
+      background: #ff6b81;
+    }
+
+    #resetButton {
+      background: #e94560;
+      border-color: #e94560;
+      color: #fff;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    #resetButton:hover {
+      background: #ff6b81;
+    }
+
+    .bigActions {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .bigActions button {
+      font-size: 1.1em;
+      padding: 12px 22px;
+      flex: 1;
+    }
+
+    #startButton, #startRoundButton {
+      background: #ffb400;
+      color: #1a1a2e;
+      font-size: 1.2em;
+      padding: 14px;
+      width: 100%;
+    }
+
+    #revealButton {
+      background: #e94560;
+      border-color: #e94560;
+    }
+
+    #revealButton:hover {
+      background: #ff6b81;
+    }
+
+    #nextButton {
+      background: #2ecc71;
+      border-color: #2ecc71;
+      color: #1a1a2e;
+    }
+
+    #nextButton:hover {
+      background: #58e08c;
+    }
+
+    #loadSelectedButton {
+      width: 100%;
+      margin-top: 8px;
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+  </style>
+</head>
+<body>
+  <h1>TNT NERDS — Host Control Panel</h1>
+
+  <div class="topBar">
+    <input type="text" id="hostNameInput" autocomplete="off" placeholder="Your name (shows on viewer screen)">
+    <button id="setHostNameButton">Set Name</button>
+    <button id="openViewerButton">Open Viewer Screen</button>
+  </div>
+
+  <div class="layout">
+    <div class="leftCol">
+      <div class="card">
+        <h2 id="formHeading">Add Round to Library</h2>
+        <input type="text" id="roundTitle" autocomplete="off" placeholder="Round title (e.g. 'Sci-Fi Movies')">
+
+        <div id="qaRows"></div>
+
+        <button id="saveRoundButton" style="width:100%; margin-top:8px;">Save to Library</button>
+        <button id="cancelEditButton" style="width:100%; margin-top:8px; display:none;">Cancel Edit</button>
+      </div>
+
+      <div class="card">
+        <h2>Round Library</h2>
+        <div id="libraryArea"></div>
+        <button id="loadSelectedButton">Load Selected Rounds for Tonight</button>
+      </div>
+    </div>
+
+    <div class="rightCol">
+      <div class="card">
+        <h2>Tonight's Show</h2>
+        <div id="savedRoundsArea"></div>
+      </div>
+
+      <div class="card" id="lobbyCard">
+        <h2>Game Control</h2>
+        <button id="resetButton">RESET GAME</button>
+        <p id="currentRoundText"></p>
+        <p id="currentQuestionText"></p>
+        <p id="currentAnswerText"></p>
+        <button id="startButton">START GAME</button>
+        <button id="startRoundButton" style="display:none;">START ROUND</button>
+      </div>
+
+      <div class="card">
+        <h2>Players</h2>
+        <div id="playersArea"></div>
+      </div>
+
+      <div class="bigActions" id="bigActions">
+        <button id="revealButton">REVEAL</button>
+        <button id="nextButton">NEXT QUESTION</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let bankCache = [];
+    let editingId = null;
+    let rowImages = [
+      { q: null, a: null },
+      { q: null, a: null },
+      { q: null, a: null },
+      { q: null, a: null },
+      { q: null, a: null }
+    ];
+
+    document.getElementById('setHostNameButton').addEventListener('click', async () => {
+      const name = document.getElementById('hostNameInput').value;
+      await fetch('/api/host/name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+    });
+
+    document.getElementById('openViewerButton').addEventListener('click', () => {
+      window.open('/viewer', '_blank');
+    });
+
+    document.getElementById('resetButton').addEventListener('click', async () => {
+      if (!confirm('Reset the game? This clears all players, scores, and progress for tonight (your Round Library stays safe).')) return;
+      await fetch('/api/game/reset', { method: 'POST' });
+      refreshStatus();
+    });
+
+    const qaRowsDiv = document.getElementById('qaRows');
+    for (let i = 0; i < 5; i++) {
+      const row = document.createElement('div');
+      row.className = 'qaRow';
+      row.innerHTML = `
+        <div class="qaCell">
+          <input type="text" class="qInput" autocomplete="off" placeholder="Question ${i + 1}">
+          <button type="button" class="imgBtn qImgBtn" data-row="${i}">📷 Add Image</button>
+          <div class="imgPreviewWrap">
+            <img class="imgPreview qImgPreview" data-row="${i}">
+            <button type="button" class="removeImgBtn qRemoveBtn" data-row="${i}">Remove</button>
+          </div>
+          <input type="file" class="qImgFile" data-row="${i}" accept="image/*" style="display:none;">
+        </div>
+        <div class="qaCell">
+          <input type="text" class="aInput" autocomplete="off" placeholder="Answer ${i + 1}">
+          <button type="button" class="imgBtn aImgBtn" data-row="${i}">📷 Add Image</button>
+          <div class="imgPreviewWrap">
+            <img class="imgPreview aImgPreview" data-row="${i}">
+            <button type="button" class="removeImgBtn aRemoveBtn" data-row="${i}">Remove</button>
+          </div>
+          <input type="file" class="aImgFile" data-row="${i}" accept="image/*" style="display:none;">
+        </div>
+      `;
+      qaRowsDiv.appendChild(row);
+    }
+
+    async function uploadImage(file) {
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      return await response.json();
+    }
+
+    function setPreview(type, row, filename) {
+      const preview = document.querySelector(`.${type}ImgPreview[data-row="${row}"]`);
+      const removeBtn = document.querySelector(`.${type}RemoveBtn[data-row="${row}"]`);
+      if (filename) {
+        preview.src = '/uploads/' + filename;
+        preview.style.display = 'inline-block';
+        removeBtn.style.display = 'inline-block';
+      } else {
+        preview.src = '';
+        preview.style.display = 'none';
+        removeBtn.style.display = 'none';
+      }
+    }
+
+    document.querySelectorAll('.qImgBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector(`.qImgFile[data-row="${btn.dataset.row}"]`).click();
+      });
+    });
+    document.querySelectorAll('.aImgBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector(`.aImgFile[data-row="${btn.dataset.row}"]`).click();
+      });
+    });
+
+    document.querySelectorAll('.qImgFile').forEach(input => {
+      input.addEventListener('change', async () => {
+        const row = parseInt(input.dataset.row);
+        if (input.files[0]) {
+          const result = await uploadImage(input.files[0]);
+          if (result.success) {
+            rowImages[row].q = result.filename;
+            setPreview('q', row, result.filename);
+          }
+        }
+      });
+    });
+    document.querySelectorAll('.aImgFile').forEach(input => {
+      input.addEventListener('change', async () => {
+        const row = parseInt(input.dataset.row);
+        if (input.files[0]) {
+          const result = await uploadImage(input.files[0]);
+          if (result.success) {
+            rowImages[row].a = result.filename;
+            setPreview('a', row, result.filename);
+          }
+        }
+      });
+    });
+
+    document.querySelectorAll('.qRemoveBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = parseInt(btn.dataset.row);
+        rowImages[row].q = null;
+        setPreview('q', row, null);
+      });
+    });
+    document.querySelectorAll('.aRemoveBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = parseInt(btn.dataset.row);
+        rowImages[row].a = null;
+        setPreview('a', row, null);
+      });
+    });
+
+    function clearForm() {
+      document.getElementById('roundTitle').value = '';
+      document.querySelectorAll('.qInput').forEach(i => i.value = '');
+      document.querySelectorAll('.aInput').forEach(i => i.value = '');
+      rowImages = [
+        { q: null, a: null }, { q: null, a: null }, { q: null, a: null },
+        { q: null, a: null }, { q: null, a: null }
+      ];
+      for (let i = 0; i < 5; i++) {
+        setPreview('q', i, null);
+        setPreview('a', i, null);
+      }
+      editingId = null;
+      document.getElementById('formHeading').textContent = 'Add Round to Library';
+      document.getElementById('saveRoundButton').textContent = 'Save to Library';
+      document.getElementById('cancelEditButton').style.display = 'none';
+    }
+
+    document.getElementById('cancelEditButton').addEventListener('click', clearForm);
+
+    document.getElementById('saveRoundButton').addEventListener('click', async () => {
+      const title = document.getElementById('roundTitle').value;
+      const qInputs = document.querySelectorAll('.qInput');
+      const aInputs = document.querySelectorAll('.aInput');
+
+      const questions = [];
+      for (let i = 0; i < qInputs.length; i++) {
+        const q = qInputs[i].value.trim();
+        const a = aInputs[i].value.trim();
+        if (q && a) {
+          questions.push({
+            question: q,
+            answer: a,
+            questionImage: rowImages[i].q || null,
+            answerImage: rowImages[i].a || null
+          });
+        }
+      }
+
+      if (!title || questions.length === 0) {
+        alert('Please add a round title and at least one question/answer.');
+        return;
+      }
+
+      if (editingId) {
+        await fetch('/api/bank/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editingId, title, questions })
+        });
+      } else {
+        await fetch('/api/bank/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, questions })
+        });
+      }
+
+      clearForm();
+      refreshBank();
+    });
+
+    function editRound(id) {
+      const round = bankCache.find(r => r.id === id);
+      if (!round) return;
+
+      editingId = id;
+      document.getElementById('formHeading').textContent = 'Edit Round';
+      document.getElementById('saveRoundButton').textContent = 'Update Round';
+      document.getElementById('cancelEditButton').style.display = 'block';
+
+      document.getElementById('roundTitle').value = round.title;
+      const qInputs = document.querySelectorAll('.qInput');
+      const aInputs = document.querySelectorAll('.aInput');
+
+      rowImages = [
+        { q: null, a: null }, { q: null, a: null }, { q: null, a: null },
+        { q: null, a: null }, { q: null, a: null }
+      ];
+
+      qInputs.forEach((input, i) => {
+        const q = round.questions[i];
+        input.value = q ? q.question : '';
+        if (q && q.questionImage) {
+          rowImages[i].q = q.questionImage;
+          setPreview('q', i, q.questionImage);
+        } else {
+          setPreview('q', i, null);
+        }
+      });
+      aInputs.forEach((input, i) => {
+        const q = round.questions[i];
+        input.value = q ? q.answer : '';
+        if (q && q.answerImage) {
+          rowImages[i].a = q.answerImage;
+          setPreview('a', i, q.answerImage);
+        } else {
+          setPreview('a', i, null);
+        }
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteRound(id) {
+      if (!confirm('Delete this round from the library? This cannot be undone.')) return;
+      await fetch('/api/bank/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      refreshBank();
+    }
+
+    function renderLibrary() {
+      const area = document.getElementById('libraryArea');
+      area.innerHTML = '';
+
+      if (bankCache.length === 0) {
+        area.innerHTML = '<p style="color:#aaa; font-size:0.9em;">No rounds in your library yet.</p>';
+        return;
+      }
+
+      bankCache.forEach(round => {
+        const div = document.createElement('div');
+        div.className = 'libraryRound';
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'roundHeaderRow';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'libCheckbox';
+        checkbox.dataset.id = round.id;
+
+        const titleLabel = document.createElement('span');
+        titleLabel.className = 'roundTitleLabel';
+        titleLabel.textContent = round.title;
+
+        const questionsDiv = document.createElement('div');
+        questionsDiv.className = 'roundQuestions';
+        round.questions.forEach((q, qi) => {
+          const p = document.createElement('p');
+          const qImg = q.questionImage ? ' [has question image]' : '';
+          const aImg = q.answerImage ? ' [has answer image]' : '';
+          p.textContent = `${qi + 1}. ${q.question}${qImg} — (${q.answer}${aImg})`;
+          questionsDiv.appendChild(p);
+        });
+
+        titleLabel.addEventListener('click', () => {
+          questionsDiv.classList.toggle('open');
+        });
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit';
+        editBtn.className = 'smallBtn';
+        editBtn.addEventListener('click', () => editRound(round.id));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.className = 'smallBtn';
+        deleteBtn.addEventListener('click', () => deleteRound(round.id));
+
+        headerRow.appendChild(checkbox);
+        headerRow.appendChild(titleLabel);
+        headerRow.appendChild(editBtn);
+        headerRow.appendChild(deleteBtn);
+
+        div.appendChild(headerRow);
+        div.appendChild(questionsDiv);
+        area.appendChild(div);
+      });
+    }
+
+    async function refreshBank() {
+      const response = await fetch('/api/bank');
+      const data = await response.json();
+      bankCache = data.bankedRounds;
+      renderLibrary();
+    }
+
+    document.getElementById('loadSelectedButton').addEventListener('click', async () => {
+      const checked = document.querySelectorAll('.libCheckbox:checked');
+      const ids = Array.from(checked).map(c => c.dataset.id);
+
+      if (ids.length === 0) {
+        alert('Select at least one round from the library first.');
+        return;
+      }
+
+      await fetch('/api/rounds/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+
+      refreshStatus();
+    });
+
+    document.getElementById('startButton').addEventListener('click', async () => {
+      const response = await fetch('/api/game/start', { method: 'POST' });
+      const result = await response.json();
+      if (!result.started) {
+        alert('Load at least one round from the library before starting.');
+      }
+      refreshStatus();
+    });
+
+    document.getElementById('startRoundButton').addEventListener('click', async () => {
+      await fetch('/api/round/begin', { method: 'POST' });
+      refreshStatus();
+    });
+
+    async function markPlayer(slot, value) {
+      await fetch('/api/mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, value })
+      });
+      refreshStatus();
+    }
+
+    async function adjustScore(slot, delta) {
+      await fetch('/api/score/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, delta })
+      });
+      refreshStatus();
+    }
+
+    async function releaseSlot(slot) {
+      if (!confirm(`Release this slot? Their name, answer, and score will be cleared.`)) return;
+      await fetch('/api/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot })
+      });
+      refreshStatus();
+    }
+
+    function renderSavedRounds(state) {
+      const area = document.getElementById('savedRoundsArea');
+      area.innerHTML = '';
+
+      if (state.rounds.length === 0) {
+        area.innerHTML = '<p style="color:#aaa; font-size:0.9em;">No rounds loaded for tonight yet.</p>';
+        return;
+      }
+
+      state.rounds.forEach((round, index) => {
+        const div = document.createElement('div');
+        div.className = 'savedRound';
+        if (state.gameStarted && index === state.currentRoundIndex) {
+          div.classList.add('activeRound');
+        }
+
+        const header = document.createElement('div');
+        header.className = 'roundHeader';
+        header.innerHTML = `<span>Round ${index + 1}: ${round.title}</span><span>▾</span>`;
+
+        const questionsDiv = document.createElement('div');
+        questionsDiv.className = 'roundQuestions';
+        round.questions.forEach((q, qi) => {
+          const p = document.createElement('p');
+          p.textContent = `${qi + 1}. ${q.question} — (${q.answer})`;
+          questionsDiv.appendChild(p);
+        });
+
+        header.addEventListener('click', () => {
+          questionsDiv.classList.toggle('open');
+        });
+
+        div.appendChild(header);
+        div.appendChild(questionsDiv);
+        area.appendChild(div);
+      });
+    }
+
+    async function refreshStatus() {
+      const response = await fetch('/api/state');
+      const state = await response.json();
+      const players = state.players;
+
+      document.getElementById('startButton').style.display = state.gameStarted ? 'none' : 'block';
+      document.getElementById('startRoundButton').style.display =
+        (state.gameStarted && state.showRoundIntro) ? 'block' : 'none';
+      document.getElementById('bigActions').style.display =
+        (state.gameStarted && !state.showRoundIntro && state.currentQuestion) ? 'flex' : 'none';
+
+      if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
+        document.getElementById('currentRoundText').textContent =
+          `Round ${state.currentRoundIndex + 1}: ${state.currentRoundTitle}`;
+        document.getElementById('currentQuestionText').textContent = 'Waiting to start this round.';
+        document.getElementById('currentAnswerText').textContent = '';
+      } else if (state.gameStarted && state.currentQuestion) {
+        document.getElementById('currentRoundText').textContent = `Round: ${state.currentRoundTitle}`;
+        document.getElementById('currentQuestionText').textContent =
+          `Q${state.currentQuestionIndex + 1} of ${state.questionsInRound}: ${state.currentQuestion.question}`;
+        document.getElementById('currentAnswerText').textContent =
+          `Correct answer: ${state.currentQuestion.answer}`;
+      } else if (state.gameStarted) {
+        document.getElementById('currentRoundText').textContent = 'Show finished!';
+        document.getElementById('currentQuestionText').textContent = '';
+        document.getElementById('currentAnswerText').textContent = '';
+      } else {
+        document.getElementById('currentRoundText').textContent =
+          `${state.roundCount} round(s) loaded for tonight.`;
+        document.getElementById('currentQuestionText').textContent = '';
+        document.getElementById('currentAnswerText').textContent = '';
+      }
+
+      renderSavedRounds(state);
+
+      const area = document.getElementById('playersArea');
+      area.innerHTML = '';
+
+      for (const slot in players) {
+        const info = players[slot];
+        const name = info.name ? info.name : '(no player yet)';
+        const answerText = info.answer ? info.answer : '(no answer yet)';
+
+        const row = document.createElement('div');
+        row.className = 'playerRow';
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'info';
+        infoDiv.innerHTML = `<span class="name">${name}</span> — ${answerText}`;
+        row.appendChild(infoDiv);
+
+        const scoreDiv = document.createElement('div');
+        scoreDiv.className = 'scoreAdjust';
+
+        const minusBtn = document.createElement('button');
+        minusBtn.textContent = '−';
+        minusBtn.addEventListener('click', () => adjustScore(slot, -1));
+        scoreDiv.appendChild(minusBtn);
+
+        const scoreLabel = document.createElement('span');
+        scoreLabel.textContent = `Score: ${info.score}`;
+        scoreLabel.style.margin = '0 6px';
+        scoreDiv.appendChild(scoreLabel);
+
+        const plusBtn = document.createElement('button');
+        plusBtn.textContent = '+';
+        plusBtn.addEventListener('click', () => adjustScore(slot, 1));
+        scoreDiv.appendChild(plusBtn);
+
+        row.appendChild(scoreDiv);
+
+        const correctBtn = document.createElement('button');
+        correctBtn.textContent = info.correct === true ? '✅ Correct (undo)' : 'Mark Correct';
+        correctBtn.disabled = !info.answer;
+        correctBtn.addEventListener('click', () => {
+          markPlayer(slot, info.correct === true ? null : true);
+        });
+        row.appendChild(correctBtn);
+
+        const incorrectBtn = document.createElement('button');
+        incorrectBtn.textContent = info.correct === false ? '❌ Incorrect (undo)' : 'Mark Incorrect';
+        incorrectBtn.disabled = !info.answer;
+        incorrectBtn.addEventListener('click', () => {
+          markPlayer(slot, info.correct === false ? null : false);
+        });
+        row.appendChild(incorrectBtn);
+
+        const releaseBtn = document.createElement('button');
+        releaseBtn.textContent = 'Release Slot';
+        releaseBtn.className = 'releaseBtn';
+        releaseBtn.disabled = !info.name;
+        releaseBtn.addEventListener('click', () => releaseSlot(slot));
+        row.appendChild(releaseBtn);
+
+        area.appendChild(row);
+      }
+    }
+
+    document.getElementById('revealButton').addEventListener('click', async () => {
+      await fetch('/api/reveal', { method: 'POST' });
+      refreshStatus();
+    });
+
+    document.getElementById('nextButton').addEventListener('click', async () => {
+      await fetch('/api/next', { method: 'POST' });
+      refreshStatus();
+    });
+
+    setInterval(refreshStatus, 1000);
+    refreshStatus();
+    refreshBank();
+  </script>
+</body>
+</html>

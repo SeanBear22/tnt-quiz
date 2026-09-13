@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TNT Nerds - Player</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 20px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      font-size: 2.2em;
+      color: #ffb400;
+      text-shadow: 2px 2px 0 #000;
+      margin-bottom: 10px;
+    }
+
+    #openViewerButton {
+      background: #0f3460;
+      color: #fff;
+      border: 2px solid #ffb400;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 0.9em;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+
+    #openViewerButton:hover {
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+
+    #slotButtons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 25px;
+    }
+
+    .slotBtn {
+      background: #0f3460;
+      color: #fff;
+      border: 2px solid #ffb400;
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-size: 1em;
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+
+    .slotBtn:hover:not(:disabled) {
+      transform: scale(1.05);
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+
+    .slotBtn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #questionDisplay {
+      background: #16213e;
+      border: 3px solid #ffb400;
+      border-radius: 12px;
+      padding: 25px;
+      font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', sans-serif;
+      font-size: 2.6em;
+      text-align: center;
+      max-width: 600px;
+      margin-bottom: 25px;
+      line-height: 1.25;
+    }
+
+    #questionDisplay img.qaImage {
+      max-width: 100%;
+      max-height: 400px;
+      width: auto;
+      height: auto;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+
+    #questionDisplay .answerLine {
+      color: #2ecc71;
+      font-size: 0.75em;
+      margin-top: 25px;
+      padding-top: 20px;
+      border-top: 3px dashed #ffb400;
+    }
+
+    .winnerTitle {
+      color: #ffb400;
+      font-size: 0.7em;
+      margin-bottom: 10px;
+    }
+
+    .winnerName {
+      color: #2ecc71;
+      font-size: 0.75em;
+      margin-bottom: 20px;
+    }
+
+    .scoreboardList {
+      font-size: 0.4em;
+      line-height: 1.8;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+    }
+
+    #answerArea {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    #whoAmI {
+      font-size: 1.1em;
+      color: #ffb400;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+
+    #answerInput {
+      width: 80%;
+      padding: 10px;
+      font-size: 1em;
+      border-radius: 6px;
+      border: none;
+      margin-bottom: 10px;
+    }
+
+    #lockButton {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1em;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      display: block;
+      margin: 0 auto 10px auto;
+    }
+
+    #lockButton:hover:not(:disabled) {
+      background: #ff6b81;
+    }
+
+    #lockButton:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #statusText {
+      color: #ffb400;
+      font-weight: bold;
+      min-height: 1.2em;
+    }
+
+    #statusText.correct { color: #2ecc71; }
+    #statusText.incorrect { color: #e74c3c; }
+
+    #webcamBox {
+      width: 160px;
+      height: 110px;
+      border: 6px solid grey;
+      border-radius: 10px;
+      margin: 15px auto 10px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f3460;
+      font-size: 0.85em;
+      color: #aaa;
+      transition: border-color 0.3s ease;
+    }
+
+    #scoreText {
+      font-size: 1.3em;
+      font-weight: bold;
+      color: #ffb400;
+    }
+  </style>
+</head>
+<body>
+  <h1>TNT NERDS QUIZ</h1>
+
+  <button id="openViewerButton">Open Viewer Screen</button>
+
+  <div id="slotButtons">
+    <button class="slotBtn" data-slot="player1">Player 1 - Empty</button>
+    <button class="slotBtn" data-slot="player2">Player 2 - Empty</button>
+    <button class="slotBtn" data-slot="player3">Player 3 - Empty</button>
+    <button class="slotBtn" data-slot="player4">Player 4 - Empty</button>
+  </div>
+
+  <div id="questionDisplay">Waiting for a question...</div>
+
+  <div id="answerArea" style="display:none;">
+    <p id="whoAmI"></p>
+    <input type="text" id="answerInput" autocomplete="off" placeholder="Type your answer">
+    <button id="lockButton">LOCK IN</button>
+    <p id="statusText"></p>
+
+    <div id="webcamBox">(webcam here)</div>
+    <p id="scoreText">Score: 0</p>
+  </div>
+
+  <script>
+    let mySlot = localStorage.getItem('tntQuizSlot');
+    let hasLockedIn = false;
+    let restoredFromStorage = false;
+
+    document.getElementById('openViewerButton').addEventListener('click', () => {
+      window.open('/viewer', '_blank');
+    });
+
+    function buildWinnerHtml(players) {
+      const joined = Object.values(players).filter(p => p.name);
+
+      if (joined.length === 0) {
+        return 'Show finished!';
+      }
+
+      const maxScore = Math.max(...joined.map(p => p.score));
+      const winners = joined.filter(p => p.score === maxScore);
+      const sorted = [...joined].sort((a, b) => b.score - a.score);
+
+      const winnerLine = winners.length > 1
+        ? `IT'S A TIE! (${maxScore} pts)`
+        : `${winners[0].name.toUpperCase()} (${maxScore} pts)`;
+
+      const scoreboardHtml = sorted
+        .map(p => `${p.name}: ${p.score}`)
+        .join('<br>');
+
+      return `
+        <div class="winnerTitle">🏆 GAME OVER 🏆</div>
+        <div class="winnerName">${winnerLine}</div>
+        <div class="scoreboardList">${scoreboardHtml}</div>
+      `;
+    }
+
+    async function refreshButtons() {
+      const response = await fetch('/api/state');
+      const state = await response.json();
+      const players = state.players;
+
+      if (mySlot && players[mySlot] && !players[mySlot].name) {
+        mySlot = null;
+        localStorage.removeItem('tntQuizSlot');
+      }
+
+      const questionBox = document.getElementById('questionDisplay');
+
+      if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
+        questionBox.innerHTML = `ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}`;
+      } else if (state.gameStarted && state.currentQuestion) {
+        const q = state.currentQuestion;
+        let html = '';
+        if (q.questionImage) {
+          html += `<img class="qaImage" src="/uploads/${q.questionImage}">`;
+        }
+        html += `Q${state.currentQuestionIndex + 1}: ${q.question}`;
+        if (state.revealed) {
+          html += `<div class="answerLine">`;
+          if (q.answerImage) {
+            html += `<img class="qaImage" src="/uploads/${q.answerImage}"><br>`;
+          }
+          html += `${q.answer}</div>`;
+        }
+        questionBox.innerHTML = html;
+      } else if (state.gameStarted) {
+        questionBox.innerHTML = buildWinnerHtml(players);
+      } else {
+        questionBox.textContent = 'Waiting for a question...';
+      }
+
+      document.querySelectorAll('.slotBtn').forEach(btn => {
+        const slot = btn.dataset.slot;
+        const info = players[slot];
+
+        if (info.name) {
+          btn.textContent = `Player ${slot.slice(-1)} - ${info.name}`;
+          btn.disabled = (mySlot !== slot);
+        } else {
+          btn.textContent = `Player ${slot.slice(-1)} - Empty`;
+          btn.disabled = false;
+        }
+      });
+
+      if (mySlot && players[mySlot] && players[mySlot].name && !restoredFromStorage) {
+        restoredFromStorage = true;
+        document.getElementById('whoAmI').textContent = `${players[mySlot].name}/Player${mySlot.slice(-1)}`;
+        document.getElementById('answerArea').style.display = 'block';
+
+        if (players[mySlot].answer) {
+          hasLockedIn = true;
+          document.getElementById('answerInput').disabled = true;
+          document.getElementById('lockButton').disabled = true;
+          document.getElementById('statusText').textContent = 'Answer locked in! Waiting for reveal...';
+        }
+      }
+
+      if (mySlot) {
+        const myInfo = players[mySlot];
+        const statusText = document.getElementById('statusText');
+
+        if (!myInfo.answer && hasLockedIn) {
+          hasLockedIn = false;
+          document.getElementById('answerInput').disabled = false;
+          document.getElementById('answerInput').value = '';
+          document.getElementById('lockButton').disabled = false;
+          statusText.textContent = '';
+          statusText.className = '';
+        }
+
+        const webcamBox = document.getElementById('webcamBox');
+        if (state.revealed && myInfo.correct === true) {
+          webcamBox.style.borderColor = '#2ecc71';
+          statusText.textContent = 'Correct!';
+          statusText.className = 'correct';
+        } else if (state.revealed && myInfo.correct === false) {
+          webcamBox.style.borderColor = '#e74c3c';
+          statusText.textContent = 'Incorrect';
+          statusText.className = 'incorrect';
+        } else {
+          webcamBox.style.borderColor = 'grey';
+        }
+
+        document.getElementById('scoreText').textContent = `Score: ${myInfo.score}`;
+      }
+    }
+
+    document.querySelectorAll('.slotBtn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (mySlot) return;
+
+        const slot = btn.dataset.slot;
+        const name = prompt('Enter your name:');
+        if (!name) return;
+
+        const response = await fetch('/api/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slot, name })
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          mySlot = slot;
+          localStorage.setItem('tntQuizSlot', slot);
+          document.getElementById('whoAmI').textContent = `${name}/Player${slot.slice(-1)}`;
+          document.getElementById('answerArea').style.display = 'block';
+        } else {
+          alert(result.message);
+        }
+        refreshButtons();
+      });
+    });
+
+    document.getElementById('lockButton').addEventListener('click', async () => {
+      const answer = document.getElementById('answerInput').value;
+      if (!answer || !mySlot) return;
+
+      const response = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: mySlot, answer })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        hasLockedIn = true;
+        document.getElementById('statusText').textContent = 'Answer locked in! Waiting for reveal...';
+        document.getElementById('answerInput').disabled = true;
+        document.getElementById('lockButton').disabled = true;
+      }
+    });
+
+    setInterval(refreshButtons, 1000);
+    refreshButtons();
+  </script>
+</body>
+</html>
