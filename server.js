@@ -3,16 +3,20 @@ const fs = require('fs');
 const multer = require('multer');
 const path = require('path');
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+// Data locations. Both default to the app directory so local development is
+// unchanged, but can be pointed at persistent storage when deployed so that
+// a redeploy (git pull) doesn't overwrite the live question bank or uploads.
+const BANK_FILE = process.env.BANK_FILE || path.join(__dirname, 'rounds-bank.json');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
 
 app.use(express.json());
 app.use(express.static(__dirname));
-
-const BANK_FILE = __dirname + '/rounds-bank.json';
-const UPLOAD_DIR = __dirname + '/uploads';
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR);
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -22,7 +26,18 @@ const storage = multer.diskStorage({
     cb(null, unique + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage });
+const ALLOWED_IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_IMAGE_TYPES.test(file.mimetype)) {
+      return cb(null, false);
+    }
+    cb(null, true);
+  }
+});
 
 let players = {
   player1: { name: null, answer: null, correct: null, score: 0 },
@@ -71,11 +86,22 @@ app.get('/viewer', (req, res) => {
   res.sendFile(__dirname + '/viewer.html');
 });
 
-app.post('/api/upload', upload.single('image'), (req, res) => {
-  if (!req.file) {
-    return res.json({ success: false });
-  }
-  res.json({ success: true, filename: req.file.filename });
+app.post('/api/upload', (req, res) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Image is too large (5MB maximum)'
+        : 'Upload failed';
+      return res.status(400).json({ success: false, message });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only PNG, JPEG, GIF and WebP images are accepted'
+      });
+    }
+    res.json({ success: true, filename: req.file.filename });
+  });
 });
 
 app.post('/api/claim', (req, res) => {
