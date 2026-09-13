@@ -51,6 +51,38 @@
       height: 280.5px;
     }
 
+    .frameWrap .cardOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background-color: #131c2b;
+      background-size: cover;
+      background-position: center;
+      display: none;
+    }
+
+    .frameWrap .cardOverlay.visible {
+      display: block;
+    }
+
+    .frameWrap .micBadge {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      z-index: 3;
+      background: rgba(155, 44, 44, 0.9);
+      color: #fff;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.6em;
+      padding: 3px 6px;
+      border-radius: 3px;
+      display: none;
+    }
+
+    .frameWrap .micBadge.visible {
+      display: block;
+    }
+
     .frameWrap .camWindowOverlay iframe {
       width: 100%;
       height: 100%;
@@ -414,6 +446,18 @@
         nameLabel.textContent = info.name ? info.name.toUpperCase() : '(EMPTY)';
         scoreNum.textContent = info.score;
 
+        const wrap = el.querySelector('.frameWrap');
+        const card = wrap ? wrap.querySelector('.cardOverlay') : null;
+        const badge = wrap ? wrap.querySelector('.micBadge') : null;
+
+        if (card) {
+          card.classList.toggle('visible', !!info.cameraOff);
+          card.style.backgroundImage = info.cardImage
+            ? `url('/uploads/${info.cardImage}')`
+            : 'none';
+        }
+        if (badge) badge.classList.toggle('visible', !!info.micMuted);
+
         if (state.revealed && info.correct === true) {
           frameImg.src = 'player-frame-green.png';
         } else if (state.revealed && info.correct === false) {
@@ -439,6 +483,15 @@
         frame.allow = 'autoplay';
         frame.scrolling = 'no';
         overlay.appendChild(frame);
+
+        const card = document.createElement('div');
+        card.className = 'cardOverlay';
+        overlay.parentElement.appendChild(card);
+
+        const badge = document.createElement('div');
+        badge.className = 'micBadge';
+        badge.textContent = 'MUTED';
+        overlay.parentElement.appendChild(badge);
       });
 
       const hostOverlay = document.querySelector('#hostBox .camWindowOverlay');

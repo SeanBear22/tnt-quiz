@@ -55,7 +55,16 @@ const upload = multer({
 });
 
 function emptyPlayer() {
-  return { name: null, answer: null, correct: null, score: 0, token: null };
+  return {
+    name: null,
+    answer: null,
+    correct: null,
+    score: 0,
+    token: null,
+    micMuted: false,
+    cameraOff: false,
+    cardImage: null
+  };
 }
 
 let players = {
@@ -116,6 +125,15 @@ function slotForToken(req) {
   return null;
 }
 
+function requirePlayer(req, res, next) {
+  const slot = slotForToken(req);
+  if (!slot) {
+    return res.status(401).json({ success: false, message: 'Claim a player slot first' });
+  }
+  req.playerSlot = slot;
+  next();
+}
+
 // --- State projection -----------------------------------------------------
 // The server is the only place that holds unrevealed answers. Every client
 // gets a view built for its role; nothing is filtered in the browser.
@@ -141,7 +159,10 @@ function projectPlayers(isHost, ownSlot) {
       answer: canSeeAnswer ? player.answer : null,
       hasAnswered: player.answer !== null,
       correct: revealed || isHost ? player.correct : null,
-      score: player.score
+      score: player.score,
+      micMuted: player.micMuted,
+      cameraOff: player.cameraOff,
+      cardImage: player.cardImage
     };
   }
   return out;
@@ -413,6 +434,42 @@ app.get('/api/state', (req, res) => {
   }
   const slot = slotForToken(req);
   res.json(buildState('player', slot));
+});
+
+// A player reporting their own feed state, so the viewer page can show a
+// mic-off badge or swap in their card. The mic and camera are actually
+// stopped in the browser; this is only how the broadcast layer finds out.
+app.post('/api/player/status', requirePlayer, (req, res) => {
+  const player = players[req.playerSlot];
+  if (typeof req.body.micMuted === 'boolean') player.micMuted = req.body.micMuted;
+  if (typeof req.body.cameraOff === 'boolean') player.cameraOff = req.body.cameraOff;
+  res.json({ success: true, micMuted: player.micMuted, cameraOff: player.cameraOff });
+});
+
+// Players upload their own card. Same limits as the host upload path; the
+// host secret is deliberately not needed here.
+app.post('/api/player/card', requirePlayer, (req, res) => {
+  upload.single('card')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Image is too large (5MB maximum)'
+        : 'Upload failed';
+      return res.status(400).json({ success: false, message });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only PNG, JPEG, GIF and WebP images are accepted'
+      });
+    }
+    players[req.playerSlot].cardImage = req.file.filename;
+    res.json({ success: true, filename: req.file.filename });
+  });
+});
+
+app.post('/api/player/card/clear', requirePlayer, (req, res) => {
+  players[req.playerSlot].cardImage = null;
+  res.json({ success: true });
 });
 
 // Unauthenticated, delayed, and safe to cache at the edge.

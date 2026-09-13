@@ -215,10 +215,78 @@
       border: 0;
       display: block;
     }
+
+    #camControls {
+      position: fixed;
+      right: 12px;
+      bottom: 170px;
+      width: 200px;
+      z-index: 50;
+      background: rgba(12, 18, 28, 0.94);
+      border-radius: 6px;
+      padding: 8px;
+      font-family: sans-serif;
+      font-size: 0.75em;
+      color: #cbd5e0;
+      display: none;
+    }
+
+    #camControls .row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    #camControls button {
+      flex: 1;
+      padding: 6px 4px;
+      font-size: 1em;
+      cursor: pointer;
+      border: 0;
+      border-radius: 4px;
+      background: #2d3748;
+      color: #e2e8f0;
+    }
+
+    #camControls button.off {
+      background: #9b2c2c;
+      color: #fff;
+    }
+
+    #camControls select,
+    #camControls input[type=file] {
+      width: 100%;
+      margin-bottom: 6px;
+      font-size: 0.95em;
+    }
+
+    #camControls label {
+      display: block;
+      margin-bottom: 2px;
+      color: #718096;
+    }
+
+    #camControls .note {
+      color: #718096;
+      min-height: 1em;
+    }
   </style>
 </head>
 <body>
   <div id="camSelf"></div>
+  <div id="camControls">
+    <div class="row">
+      <button id="micBtn" type="button">Mic on</button>
+      <button id="camBtn" type="button">Camera on</button>
+    </div>
+    <label for="micSelect">Microphone</label>
+    <select id="micSelect"></select>
+    <label for="vidSelect">Camera</label>
+    <select id="vidSelect"></select>
+    <label for="cardInput">Card shown when camera is off</label>
+    <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+    <div class="note" id="camNote"></div>
+  </div>
   <h1>TNT NERDS QUIZ</h1>
 
   <button id="openViewerButton">Open Viewer Screen</button>
@@ -429,6 +497,148 @@
       }
     });
 
+    // --- Feed controls -----------------------------------------------------
+    // The mic and camera are genuinely stopped in the browser, not merely
+    // covered up. The server is told separately so the viewer page can show a
+    // mic-off badge or swap in the card.
+
+    let camFrame = null;
+    let micOn = true;
+    let cameraOn = true;
+
+    function toFrame(message) {
+      if (camFrame && camFrame.contentWindow) {
+        camFrame.contentWindow.postMessage(message, '*');
+      }
+    }
+
+    function note(text) {
+      document.getElementById('camNote').textContent = text || '';
+    }
+
+    async function reportStatus() {
+      try {
+        await fetch('/api/player/status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Player-Token': myToken || ''
+          },
+          body: JSON.stringify({ micMuted: !micOn, cameraOff: !cameraOn })
+        });
+      } catch (err) {
+        note('Could not reach the server');
+      }
+    }
+
+    document.getElementById('micBtn').addEventListener('click', () => {
+      micOn = !micOn;
+      toFrame({ mic: micOn });
+      const btn = document.getElementById('micBtn');
+      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
+      btn.classList.toggle('off', !micOn);
+      reportStatus();
+    });
+
+    document.getElementById('camBtn').addEventListener('click', () => {
+      cameraOn = !cameraOn;
+      toFrame({ action: 'camera', value: cameraOn });
+      const btn = document.getElementById('camBtn');
+      btn.textContent = cameraOn ? 'Camera on' : 'Camera OFF';
+      btn.classList.toggle('off', !cameraOn);
+      reportStatus();
+    });
+
+    // --- Device selection --------------------------------------------------
+    // Device IDs are scoped to the origin that listed them, so the list has to
+    // come from inside the VDO.Ninja frame and the IDs go straight back to it.
+    // Labels are stored too: IDs change when a USB device is replugged.
+
+    function savedDevice(kind) {
+      try {
+        return JSON.parse(localStorage.getItem('tntQuizDevice_' + kind) || 'null');
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function saveDevice(kind, id, label) {
+      localStorage.setItem('tntQuizDevice_' + kind, JSON.stringify({ id, label }));
+    }
+
+    function fillSelect(select, devices, kind) {
+      select.innerHTML = '';
+      devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || 'Unnamed device';
+        select.appendChild(option);
+      });
+
+      const saved = savedDevice(kind);
+      if (!saved) return;
+
+      let match = devices.find(d => d.deviceId === saved.id);
+      if (!match && saved.label) {
+        match = devices.find(d => d.label === saved.label);
+      }
+      if (match) {
+        select.value = match.deviceId;
+        applyDevice(kind, match.deviceId, match.label);
+      }
+    }
+
+    function applyDevice(kind, id, label) {
+      if (kind === 'audio') toFrame({ changeAudioDevice: id });
+      else toFrame({ changeVideoDevice: id });
+      saveDevice(kind, id, label);
+    }
+
+    window.addEventListener('message', event => {
+      if (!camFrame || event.source !== camFrame.contentWindow) return;
+      const data = event.data;
+      if (!data || !Array.isArray(data.deviceList)) return;
+
+      const mics = data.deviceList.filter(d => d.kind === 'audioinput');
+      const cams = data.deviceList.filter(d => d.kind === 'videoinput');
+      fillSelect(document.getElementById('micSelect'), mics, 'audio');
+      fillSelect(document.getElementById('vidSelect'), cams, 'video');
+      note(mics.length + ' mic(s), ' + cams.length + ' camera(s) found');
+    });
+
+    document.getElementById('micSelect').addEventListener('change', event => {
+      const option = event.target.selectedOptions[0];
+      applyDevice('audio', event.target.value, option ? option.textContent : '');
+      note('Microphone changed');
+    });
+
+    document.getElementById('vidSelect').addEventListener('change', event => {
+      const option = event.target.selectedOptions[0];
+      applyDevice('video', event.target.value, option ? option.textContent : '');
+      note('Camera changed');
+    });
+
+    // --- Card upload -------------------------------------------------------
+
+    document.getElementById('cardInput').addEventListener('change', async event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      note('Uploading card...');
+      const form = new FormData();
+      form.append('card', file);
+      try {
+        const response = await fetch('/api/player/card', {
+          method: 'POST',
+          headers: { 'X-Player-Token': myToken || '' },
+          body: form
+        });
+        const result = await response.json();
+        note(result.success ? 'Card saved' : (result.message || 'Upload failed'));
+      } catch (err) {
+        note('Upload failed');
+      }
+    });
+
     // Joining the quiz is joining the call. Opening the page and claiming a
     // slot starts the camera; there is no second tab to remember.
     let camMounted = false;
@@ -444,7 +654,17 @@
       frame.scrolling = 'no';
       holder.appendChild(frame);
       holder.style.display = 'block';
+      camFrame = frame;
       camMounted = true;
+
+      document.getElementById('camControls').style.display = 'block';
+
+      // The frame needs a moment to come up before it will answer.
+      frame.addEventListener('load', () => {
+        setTimeout(() => toFrame({ getDeviceList: true, cib: 'setup' }), 1500);
+      });
+
+      reportStatus();
     }
 
     if (mySlot) mountSelfCamera(mySlot);
