@@ -54,6 +54,10 @@ function vdoPushUrl(seat) {
     'password=' + encodeURIComponent(VDO.password),
     'push=' + encodeURIComponent(id),
     'webcam',
+    // Without autostart the guest is shown VDO.Ninja's join screen with a
+    // START button. Camera permission is not requested until that is clicked,
+    // and device labels stay blank until permission is granted.
+    'autostart',
     'quality=1',
     'videobitrate=' + VDO.videoBitrate,
     'cleanoutput'

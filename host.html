@@ -325,8 +325,8 @@
       position: fixed;
       right: 12px;
       bottom: 12px;
-      width: 200px;
-      height: 150px;
+      width: 280px;
+      height: 210px;
       z-index: 50;
       border-radius: 6px;
       overflow: hidden;
@@ -445,7 +445,7 @@
       if (!url) return;
       const frame = document.createElement('iframe');
       frame.src = url;
-      frame.allow = 'camera; microphone; autoplay';
+      frame.allow = 'camera; microphone; autoplay; fullscreen; display-capture';
       frame.scrolling = 'no';
       document.getElementById('camSelf').appendChild(frame);
     })();

@@ -199,8 +199,8 @@
       position: fixed;
       right: 12px;
       bottom: 12px;
-      width: 200px;
-      height: 150px;
+      width: 280px;
+      height: 210px;
       z-index: 50;
       border-radius: 6px;
       overflow: hidden;
@@ -219,14 +219,14 @@
     #camControls {
       position: fixed;
       right: 12px;
-      bottom: 170px;
-      width: 200px;
+      bottom: 230px;
+      width: 280px;
       z-index: 50;
       background: rgba(12, 18, 28, 0.94);
       border-radius: 6px;
       padding: 8px;
       font-family: sans-serif;
-      font-size: 0.75em;
+      font-size: 0.8em;
       color: #cbd5e0;
       display: none;
     }
@@ -258,6 +258,11 @@
       width: 100%;
       margin-bottom: 6px;
       font-size: 0.95em;
+      box-sizing: border-box;
+    }
+
+    #camControls select {
+      padding: 4px;
     }
 
     #camControls label {
@@ -505,6 +510,7 @@
     let camFrame = null;
     let micOn = true;
     let cameraOn = true;
+    let devicesNamed = false;
 
     function toFrame(message) {
       if (camFrame && camFrame.contentWindow) {
@@ -603,7 +609,17 @@
       const cams = data.deviceList.filter(d => d.kind === 'videoinput');
       fillSelect(document.getElementById('micSelect'), mics, 'audio');
       fillSelect(document.getElementById('vidSelect'), cams, 'video');
-      note(mics.length + ' mic(s), ' + cams.length + ' camera(s) found');
+
+      devicesNamed = mics.concat(cams).some(d => d.label);
+      note(devicesNamed
+        ? mics.length + ' mic(s), ' + cams.length + ' camera(s) found'
+        : 'Waiting for camera permission...');
+    });
+
+    ['micSelect', 'vidSelect'].forEach(id => {
+      document.getElementById(id).addEventListener('mousedown', () => {
+        toFrame({ getDeviceList: true, cib: 'setup' });
+      });
     });
 
     document.getElementById('micSelect').addEventListener('change', event => {
@@ -650,7 +666,7 @@
       const holder = document.getElementById('camSelf');
       const frame = document.createElement('iframe');
       frame.src = url;
-      frame.allow = 'camera; microphone; autoplay';
+      frame.allow = 'camera; microphone; autoplay; fullscreen; display-capture';
       frame.scrolling = 'no';
       holder.appendChild(frame);
       holder.style.display = 'block';
@@ -659,9 +675,15 @@
 
       document.getElementById('camControls').style.display = 'block';
 
-      // The frame needs a moment to come up before it will answer.
+      // Device labels stay blank until the browser has granted camera
+      // permission, which happens a little after the frame loads. Ask a few
+      // times rather than once, and stop as soon as real labels arrive.
       frame.addEventListener('load', () => {
-        setTimeout(() => toFrame({ getDeviceList: true, cib: 'setup' }), 1500);
+        [1500, 4000, 8000, 15000].forEach(delay => {
+          setTimeout(() => {
+            if (!devicesNamed) toFrame({ getDeviceList: true, cib: 'setup' });
+          }, delay);
+        });
       });
 
       reportStatus();
