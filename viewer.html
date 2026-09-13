@@ -354,7 +354,7 @@
     }
 
     async function refreshViewer() {
-      const response = await fetch('/api/state');
+      const response = await fetch('/api/state/viewer');
       const state = await response.json();
       const players = state.players;
 

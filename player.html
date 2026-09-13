@@ -220,6 +220,10 @@
   </div>
 
   <script>
+    // Token issued by the server when this browser claims a slot. It proves
+    // which player is submitting, so a slot cannot be answered for by anyone
+    // else.
+    let myToken = localStorage.getItem('tntQuizToken');
     let mySlot = localStorage.getItem('tntQuizSlot');
     let hasLockedIn = false;
     let restoredFromStorage = false;
@@ -255,13 +259,17 @@
     }
 
     async function refreshButtons() {
-      const response = await fetch('/api/state');
+      const response = await fetch('/api/state', {
+        headers: myToken ? { 'X-Player-Token': myToken } : {}
+      });
       const state = await response.json();
       const players = state.players;
 
       if (mySlot && players[mySlot] && !players[mySlot].name) {
         mySlot = null;
+        myToken = null;
         localStorage.removeItem('tntQuizSlot');
+        localStorage.removeItem('tntQuizToken');
       }
 
       const questionBox = document.getElementById('questionDisplay');
@@ -362,7 +370,9 @@
 
         if (result.success) {
           mySlot = slot;
+          myToken = result.token;
           localStorage.setItem('tntQuizSlot', slot);
+          localStorage.setItem('tntQuizToken', result.token);
           document.getElementById('whoAmI').textContent = `${name}/Player${slot.slice(-1)}`;
           document.getElementById('answerArea').style.display = 'block';
         } else {
@@ -378,8 +388,11 @@
 
       const response = await fetch('/api/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slot: mySlot, answer })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Player-Token': myToken || ''
+        },
+        body: JSON.stringify({ answer })
       });
       const result = await response.json();
 

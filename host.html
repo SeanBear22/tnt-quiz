@@ -378,6 +378,43 @@
   </div>
 
   <script>
+    // Every /api/ call from this page carries the host secret. It is kept in
+    // sessionStorage so it is entered once per browser session and never
+    // written to disk. A 401 clears it and prompts again.
+    (function () {
+      const KEY = 'tntQuizHostSecret';
+
+      function getSecret() {
+        let secret = sessionStorage.getItem(KEY);
+        while (!secret) {
+          secret = window.prompt('Host secret:');
+          if (secret === null) return null;
+          secret = secret.trim();
+        }
+        sessionStorage.setItem(KEY, secret);
+        return secret;
+      }
+
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async function (input, init) {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (!url.startsWith('/api/')) return realFetch(input, init);
+
+        const secret = getSecret();
+        const options = Object.assign({}, init);
+        options.headers = new Headers((init && init.headers) || {});
+        if (secret) options.headers.set('X-Host-Secret', secret);
+
+        const response = await realFetch(input, options);
+        if (response.status === 401) {
+          sessionStorage.removeItem(KEY);
+          alert('Host secret rejected. You will be asked for it again.');
+        }
+        return response;
+      };
+
+      getSecret();
+    })();
     let bankCache = [];
     let editingId = null;
     let rowImages = [

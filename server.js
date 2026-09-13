@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const path = require('path');
 const app = express();
@@ -10,6 +11,20 @@ const PORT = process.env.PORT || 3000;
 // a redeploy (git pull) doesn't overwrite the live question bank or uploads.
 const BANK_FILE = process.env.BANK_FILE || path.join(__dirname, 'rounds-bank.json');
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
+
+// Shared secret the host page must present on every control endpoint. Set this
+// in the environment for any deployment. If it is missing one is generated at
+// startup and logged, which keeps local development working but means the
+// secret changes on every restart.
+const HOST_SECRET = process.env.HOST_SECRET || crypto.randomBytes(24).toString('hex');
+if (!process.env.HOST_SECRET) {
+  console.warn('HOST_SECRET not set. Using generated secret for this run: ' + HOST_SECRET);
+}
+
+// Viewers watching via a stream are behind the live game by the broadcast
+// delay. Serving them a snapshot from this many seconds ago keeps the app in
+// step with what they are actually watching. 0 disables the delay.
+const VIEWER_DELAY_SECONDS = Number(process.env.VIEWER_DELAY_SECONDS || 0);
 
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -39,11 +54,15 @@ const upload = multer({
   }
 });
 
+function emptyPlayer() {
+  return { name: null, answer: null, correct: null, score: 0, token: null };
+}
+
 let players = {
-  player1: { name: null, answer: null, correct: null, score: 0 },
-  player2: { name: null, answer: null, correct: null, score: 0 },
-  player3: { name: null, answer: null, correct: null, score: 0 },
-  player4: { name: null, answer: null, correct: null, score: 0 }
+  player1: emptyPlayer(),
+  player2: emptyPlayer(),
+  player3: emptyPlayer(),
+  player4: emptyPlayer()
 };
 
 let revealed = false;
@@ -70,6 +89,120 @@ function saveBank() {
 
 loadBank();
 
+// --- Authentication -------------------------------------------------------
+
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a || ''));
+  const bufB = Buffer.from(String(b || ''));
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function requireHost(req, res, next) {
+  if (!safeEqual(req.get('X-Host-Secret'), HOST_SECRET)) {
+    return res.status(401).json({ success: false, message: 'Host authentication required' });
+  }
+  next();
+}
+
+// Identifies the caller from their player token, if they have one. Returns the
+// slot name or null. Used to decide what a given client is allowed to see.
+function slotForToken(req) {
+  const token = req.get('X-Player-Token');
+  if (!token) return null;
+  for (const slot of Object.keys(players)) {
+    if (players[slot].token && safeEqual(token, players[slot].token)) return slot;
+  }
+  return null;
+}
+
+// --- State projection -----------------------------------------------------
+// The server is the only place that holds unrevealed answers. Every client
+// gets a view built for its role; nothing is filtered in the browser.
+
+function projectQuestion(question, isHost) {
+  if (!question) return null;
+  const showAnswer = isHost || revealed;
+  return {
+    question: question.question,
+    questionImage: question.questionImage || null,
+    answer: showAnswer ? question.answer : null,
+    answerImage: showAnswer ? (question.answerImage || null) : null
+  };
+}
+
+function projectPlayers(isHost, ownSlot) {
+  const out = {};
+  for (const slot of Object.keys(players)) {
+    const player = players[slot];
+    const canSeeAnswer = isHost || revealed || slot === ownSlot;
+    out[slot] = {
+      name: player.name,
+      answer: canSeeAnswer ? player.answer : null,
+      hasAnswered: player.answer !== null,
+      correct: revealed || isHost ? player.correct : null,
+      score: player.score
+    };
+  }
+  return out;
+}
+
+function buildState(role, ownSlot) {
+  const isHost = role === 'host';
+  const currentRound = rounds[currentRoundIndex] || null;
+  const currentQuestion = currentRound ? currentRound.questions[currentQuestionIndex] : null;
+
+  const state = {
+    players: projectPlayers(isHost, ownSlot),
+    revealed,
+    gameStarted,
+    roundCount: rounds.length,
+    currentRoundIndex,
+    currentRoundTitle: currentRound ? currentRound.title : null,
+    currentQuestion: projectQuestion(currentQuestion, isHost),
+    currentQuestionIndex,
+    questionsInRound: currentRound ? currentRound.questions.length : 0,
+    hostName,
+    showRoundIntro
+  };
+
+  // Only the host receives the loaded rounds, which contain every answer.
+  if (isHost) state.rounds = rounds;
+
+  return state;
+}
+
+// --- Viewer delay ---------------------------------------------------------
+// A short rolling history of viewer-facing snapshots, so viewers can be served
+// the state as it was N seconds ago rather than the live state.
+
+const snapshots = [];
+
+function recordSnapshot() {
+  if (VIEWER_DELAY_SECONDS <= 0) return;
+  const now = Date.now();
+  snapshots.push({ at: now, state: buildState('viewer', null) });
+  const cutoff = now - (VIEWER_DELAY_SECONDS + 30) * 1000;
+  while (snapshots.length && snapshots[0].at < cutoff) snapshots.shift();
+}
+
+if (VIEWER_DELAY_SECONDS > 0) {
+  setInterval(recordSnapshot, 250).unref();
+}
+
+function viewerState() {
+  if (VIEWER_DELAY_SECONDS <= 0) return buildState('viewer', null);
+  const target = Date.now() - VIEWER_DELAY_SECONDS * 1000;
+  let chosen = null;
+  for (const snapshot of snapshots) {
+    if (snapshot.at <= target) chosen = snapshot;
+    else break;
+  }
+  // Before enough history has accumulated, show the pre-game state rather than
+  // leaking the live one.
+  return chosen ? chosen.state : buildState('viewer', null);
+}
+
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
@@ -86,7 +219,7 @@ app.get('/viewer', (req, res) => {
   res.sendFile(__dirname + '/viewer.html');
 });
 
-app.post('/api/upload', (req, res) => {
+app.post('/api/upload', requireHost, (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
       const message = err.code === 'LIMIT_FILE_SIZE'
@@ -107,26 +240,30 @@ app.post('/api/upload', (req, res) => {
 app.post('/api/claim', (req, res) => {
   const { slot, name } = req.body;
   if (players[slot] && players[slot].name === null) {
-    players[slot].name = name;
-    return res.json({ success: true });
+    const token = crypto.randomBytes(18).toString('hex');
+    players[slot].name = typeof name === 'string' ? name.slice(0, 40) : 'Player';
+    players[slot].token = token;
+    return res.json({ success: true, token });
   }
   res.json({ success: false, message: 'Slot already taken' });
 });
 
 app.post('/api/submit', (req, res) => {
-  const { slot, answer } = req.body;
-  if (players[slot]) {
-    players[slot].answer = answer;
+  const { answer } = req.body;
+  const slot = slotForToken(req);
+  if (!slot) {
+    return res.status(401).json({ success: false, message: 'Claim a player slot first' });
   }
+  players[slot].answer = typeof answer === 'string' ? answer.slice(0, 500) : '';
   res.json({ success: true });
 });
 
-app.post('/api/reveal', (req, res) => {
+app.post('/api/reveal', requireHost, (req, res) => {
   revealed = true;
   res.json({ success: true });
 });
 
-app.post('/api/mark', (req, res) => {
+app.post('/api/mark', requireHost, (req, res) => {
   const { slot, value } = req.body;
   const player = players[slot];
   if (!player) return res.json({ success: false });
@@ -142,7 +279,7 @@ app.post('/api/mark', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/score/adjust', (req, res) => {
+app.post('/api/score/adjust', requireHost, (req, res) => {
   const { slot, delta } = req.body;
   if (players[slot]) {
     players[slot].score += delta;
@@ -150,21 +287,21 @@ app.post('/api/score/adjust', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/release', (req, res) => {
+app.post('/api/release', requireHost, (req, res) => {
   const { slot } = req.body;
   if (players[slot]) {
-    players[slot] = { name: null, answer: null, correct: null, score: 0 };
+    players[slot] = emptyPlayer();
   }
   res.json({ success: true });
 });
 
 // Full reset: clears players, scores, and game/round progress (keeps the round library and tonight's loaded rounds)
-app.post('/api/game/reset', (req, res) => {
+app.post('/api/game/reset', requireHost, (req, res) => {
   players = {
-    player1: { name: null, answer: null, correct: null, score: 0 },
-    player2: { name: null, answer: null, correct: null, score: 0 },
-    player3: { name: null, answer: null, correct: null, score: 0 },
-    player4: { name: null, answer: null, correct: null, score: 0 }
+    player1: emptyPlayer(),
+    player2: emptyPlayer(),
+    player3: emptyPlayer(),
+    player4: emptyPlayer()
   };
   revealed = false;
   gameStarted = false;
@@ -174,11 +311,11 @@ app.post('/api/game/reset', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/bank', (req, res) => {
+app.get('/api/bank', requireHost, (req, res) => {
   res.json({ bankedRounds });
 });
 
-app.post('/api/bank/add', (req, res) => {
+app.post('/api/bank/add', requireHost, (req, res) => {
   const { title, questions } = req.body;
   if (title && Array.isArray(questions) && questions.length > 0) {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -188,7 +325,7 @@ app.post('/api/bank/add', (req, res) => {
   res.json({ success: true, bankedRounds });
 });
 
-app.post('/api/bank/edit', (req, res) => {
+app.post('/api/bank/edit', requireHost, (req, res) => {
   const { id, title, questions } = req.body;
   const round = bankedRounds.find(r => r.id === id);
   if (round) {
@@ -199,14 +336,14 @@ app.post('/api/bank/edit', (req, res) => {
   res.json({ success: true, bankedRounds });
 });
 
-app.post('/api/bank/delete', (req, res) => {
+app.post('/api/bank/delete', requireHost, (req, res) => {
   const { id } = req.body;
   bankedRounds = bankedRounds.filter(r => r.id !== id);
   saveBank();
   res.json({ success: true, bankedRounds });
 });
 
-app.post('/api/rounds/select', (req, res) => {
+app.post('/api/rounds/select', requireHost, (req, res) => {
   const { ids } = req.body;
   if (Array.isArray(ids)) {
     rounds = ids
@@ -222,7 +359,7 @@ app.post('/api/rounds/select', (req, res) => {
   res.json({ success: true, roundCount: rounds.length });
 });
 
-app.post('/api/game/start', (req, res) => {
+app.post('/api/game/start', requireHost, (req, res) => {
   if (rounds.length > 0) {
     gameStarted = true;
     currentRoundIndex = 0;
@@ -232,12 +369,12 @@ app.post('/api/game/start', (req, res) => {
   res.json({ success: true, started: gameStarted });
 });
 
-app.post('/api/round/begin', (req, res) => {
+app.post('/api/round/begin', requireHost, (req, res) => {
   showRoundIntro = false;
   res.json({ success: true });
 });
 
-app.post('/api/next', (req, res) => {
+app.post('/api/next', requireHost, (req, res) => {
   for (const slot in players) {
     players[slot].answer = null;
     players[slot].correct = null;
@@ -262,30 +399,26 @@ app.post('/api/next', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/host/name', (req, res) => {
+app.post('/api/host/name', requireHost, (req, res) => {
   const { name } = req.body;
   hostName = name && name.trim() ? name.trim() : null;
   res.json({ success: true });
 });
 
+// Host and players. The role is derived from credentials, never from the
+// request asking for one.
 app.get('/api/state', (req, res) => {
-  const currentRound = rounds[currentRoundIndex] || null;
-  const currentQuestion = currentRound ? currentRound.questions[currentQuestionIndex] : null;
+  if (safeEqual(req.get('X-Host-Secret'), HOST_SECRET)) {
+    return res.json(buildState('host', null));
+  }
+  const slot = slotForToken(req);
+  res.json(buildState('player', slot));
+});
 
-  res.json({
-    players,
-    revealed,
-    gameStarted,
-    roundCount: rounds.length,
-    rounds,
-    currentRoundIndex,
-    currentRoundTitle: currentRound ? currentRound.title : null,
-    currentQuestion,
-    currentQuestionIndex,
-    questionsInRound: currentRound ? currentRound.questions.length : 0,
-    hostName,
-    showRoundIntro
-  });
+// Unauthenticated, delayed, and safe to cache at the edge.
+app.get('/api/state/viewer', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=1');
+  res.json(viewerState());
 });
 
 app.listen(PORT, () => {
