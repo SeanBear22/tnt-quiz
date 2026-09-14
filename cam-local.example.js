@@ -17,5 +17,11 @@ window.CAM_LOCAL = {
   // },
 
   // Optional: lower this if anyone's connection struggles.
-  // videoBitrate: 900
+  // videoBitrate: 900,
+
+  // Optional: mirror the feeds on the viewer page. false (the default) shows
+  // what the camera actually sees, so writing reads the right way round.
+  // mirror: true,
+  // ...or per seat:
+  // mirror: { player2: true }
 };

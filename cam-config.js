@@ -48,7 +48,14 @@ const VDO = {
 
   // Outbound video. 1200kbps keeps six simultaneous uploads comfortable on a
   // domestic connection. Raise it if the picture looks soft.
-  videoBitrate: 1200
+  videoBitrate: 1200,
+
+  // Mirror the feed on the viewer page. Off by default, which is what the
+  // camera actually sees: anything with writing on it reads correctly, and
+  // that is normally what you want going out on a broadcast. Set to true if
+  // you would rather everyone appear as they see themselves. Can be set per
+  // seat with an object, e.g. mirror: { player2: true }.
+  mirror: false
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
@@ -106,6 +113,15 @@ function vdoViewUrl(seat) {
     // for a camera, instead of watching the stream named in &view.
     'solo'
   ];
+
+  // Zoom and crop the video so it fills the frame cutout instead of sitting
+  // letterboxed inside it.
+  params.push('cover');
+
+  const mirror = typeof VDO.mirror === 'object'
+    ? !!VDO.mirror[seat]
+    : !!VDO.mirror;
+  if (mirror) params.push('mirror=1');
 
   if (!debug) params.push('cleanoutput', 'transparent');
 
