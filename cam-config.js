@@ -19,12 +19,15 @@ const VDO = {
 
   // Stream ID per seat. These are what the viewer page views, so they must
   // match what each person pushes.
+  // Underscores, not hyphens. VDO.Ninja sanitises stream IDs when publishing
+  // and a hyphen comes back as an underscore, so a hyphenated ID here
+  // publishes as something the viewer link never finds.
   streamIds: {
-    host: 'tnt-host',
-    player1: 'tnt-p1',
-    player2: 'tnt-p2',
-    player3: 'tnt-p3',
-    player4: 'tnt-p4'
+    host: 'tnt_host',
+    player1: 'tnt_p1',
+    player2: 'tnt_p2',
+    player3: 'tnt_p3',
+    player4: 'tnt_p4'
   },
 
   // Audio chain applied at the source, so each person can be tuned to their
