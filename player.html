@@ -173,21 +173,6 @@
     #statusText.correct { color: #2ecc71; }
     #statusText.incorrect { color: #e74c3c; }
 
-    #webcamBox {
-      width: 160px;
-      height: 110px;
-      border: 6px solid grey;
-      border-radius: 10px;
-      margin: 15px auto 10px auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #0f3460;
-      font-size: 0.85em;
-      color: #aaa;
-      transition: border-color 0.3s ease;
-    }
-
     #scoreText {
       font-size: 1.3em;
       font-weight: bold;
@@ -196,16 +181,15 @@
   </style>
   <style>
     #camSelf {
-      position: fixed;
-      right: 12px;
-      bottom: 12px;
-      width: 280px;
-      height: 210px;
-      z-index: 50;
-      border-radius: 6px;
+      width: 100%;
+      max-width: 260px;
+      aspect-ratio: 4 / 3;
+      margin: 10px auto 0 auto;
+      border: 6px solid grey;
+      border-radius: 10px;
       overflow: hidden;
       background: #131c2b;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      transition: border-color 0.3s ease;
       display: none;
     }
 
@@ -217,17 +201,16 @@
     }
 
     #camControls {
-      position: fixed;
-      right: 12px;
-      bottom: 230px;
-      width: 280px;
-      z-index: 50;
-      background: rgba(12, 18, 28, 0.94);
+      width: 100%;
+      max-width: 260px;
+      margin: 15px auto 0 auto;
+      background: rgba(12, 18, 28, 0.6);
       border-radius: 6px;
-      padding: 8px;
+      padding: 10px;
       font-family: sans-serif;
       font-size: 0.8em;
       color: #cbd5e0;
+      text-align: left;
       display: none;
     }
 
@@ -278,20 +261,6 @@
   </style>
 </head>
 <body>
-  <div id="camSelf"></div>
-  <div id="camControls">
-    <div class="row">
-      <button id="micBtn" type="button">Mic on</button>
-      <button id="camBtn" type="button">Camera on</button>
-    </div>
-    <label for="micSelect">Microphone</label>
-    <select id="micSelect"></select>
-    <label for="vidSelect">Camera</label>
-    <select id="vidSelect"></select>
-    <label for="cardInput">Card shown when camera is off</label>
-    <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
-    <div class="note" id="camNote"></div>
-  </div>
   <h1>TNT NERDS QUIZ</h1>
 
   <button id="openViewerButton">Open Viewer Screen</button>
@@ -306,13 +275,26 @@
   <div id="questionDisplay">Waiting for a question...</div>
 
   <div id="answerArea" style="display:none;">
+    <p id="scoreText">Score: 0</p>
     <p id="whoAmI"></p>
     <input type="text" id="answerInput" autocomplete="off" placeholder="Type your answer">
     <button id="lockButton">LOCK IN</button>
     <p id="statusText"></p>
 
-    <div id="webcamBox">(webcam here)</div>
-    <p id="scoreText">Score: 0</p>
+    <div id="camControls">
+      <div class="row">
+        <button id="micBtn" type="button">Mic on</button>
+        <button id="camBtn" type="button">Camera on</button>
+      </div>
+      <label for="micSelect">Microphone</label>
+      <select id="micSelect"></select>
+      <label for="vidSelect">Camera</label>
+      <select id="vidSelect"></select>
+      <label for="cardInput">Card shown when camera is off</label>
+      <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+      <div class="note" id="camNote"></div>
+    </div>
+    <div id="camSelf"></div>
   </div>
 
   <script src="cam-local.js"></script>
@@ -434,7 +416,7 @@
           statusText.className = '';
         }
 
-        const webcamBox = document.getElementById('webcamBox');
+        const webcamBox = document.getElementById('camSelf');
         if (state.revealed && myInfo.correct === true) {
           webcamBox.style.borderColor = '#2ecc71';
           statusText.textContent = 'Correct!';
