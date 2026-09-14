@@ -224,6 +224,12 @@ function viewerState() {
   return chosen ? chosen.state : buildState('viewer', null);
 }
 
+// express.static serves cam-local.js when it exists. When it does not, this
+// keeps the page from logging a 404 for an optional file.
+app.get('/cam-local.js', (req, res) => {
+  res.type('application/javascript').send('// no local overrides\n');
+});
+
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });

@@ -3,6 +3,11 @@
 // Everything to do with the webcam feeds is configured here, so stream IDs and
 // per-person audio tweaks can be changed without touching page markup.
 //
+// Deployment-specific values (the room password above all) belong in
+// cam-local.js, which is gitignored. Copy cam-local.example.js to
+// cam-local.js and edit that instead of this file, so a git pull never
+// collides with local settings. See the bottom of this file.
+//
 // Audio and video travel together in one stream per person, so they stay in
 // sync with no offset needed anywhere.
 
@@ -42,6 +47,20 @@ const VDO = {
   // domestic connection. Raise it if the picture looks soft.
   videoBitrate: 1200
 };
+
+// Apply cam-local.js if one is present. Top-level keys replace the defaults;
+// streamIds and audioChain are merged key by key so a local file can override
+// one seat without restating all of them.
+if (typeof window !== 'undefined' && window.CAM_LOCAL) {
+  const local = window.CAM_LOCAL;
+  Object.keys(local).forEach(key => {
+    if (key === 'streamIds' || key === 'audioChain') {
+      Object.assign(VDO[key], local[key]);
+    } else {
+      VDO[key] = local[key];
+    }
+  });
+}
 
 // Link each person opens (embedded in the quiz page). Pushes their camera and
 // mic into the room, and plays back everyone else's audio.
