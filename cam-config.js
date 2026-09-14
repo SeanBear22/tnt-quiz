@@ -92,6 +92,9 @@ function vdoViewUrl(seat) {
     'view=' + encodeURIComponent(id),
     'room=' + encodeURIComponent(VDO.room),
     'password=' + encodeURIComponent(VDO.password),
+    // Without &solo, a room URL makes this frame join as a publisher and ask
+    // for a camera, instead of watching the stream named in &view.
+    'solo',
     'cleanoutput',
     'transparent'
   ].join('&');

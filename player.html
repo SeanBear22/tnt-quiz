@@ -589,10 +589,12 @@
       if (!match && saved.label) {
         match = devices.find(d => d.label === saved.label);
       }
-      if (match) {
-        select.value = match.deviceId;
-        applyDevice(kind, match.deviceId, match.label);
-      }
+      if (!match) return;
+      select.value = match.deviceId;
+
+      // Only switch device once the stream is actually publishing. Applying it
+      // mid-startup interrupts autostart and leaves the join screen up.
+      if (devicesNamed) applyDevice(kind, match.deviceId, match.label);
     }
 
     function applyDevice(kind, id, label) {
