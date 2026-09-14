@@ -88,14 +88,23 @@ function vdoPushUrl(seat) {
 function vdoViewUrl(seat) {
   const id = VDO.streamIds[seat];
   if (!id) return null;
-  return 'https://vdo.ninja/?' + [
+
+  // Load /viewer?camdebug to keep VDO.Ninja's own UI and messages visible.
+  // cleanoutput and transparent hide connection errors, which makes a frame
+  // that is failing look identical to one that is simply empty.
+  const debug = typeof location !== 'undefined'
+    && location.search.indexOf('camdebug') !== -1;
+
+  const params = [
     'view=' + encodeURIComponent(id),
     'room=' + encodeURIComponent(VDO.room),
     'password=' + encodeURIComponent(VDO.password),
     // Without &solo, a room URL makes this frame join as a publisher and ask
     // for a camera, instead of watching the stream named in &view.
-    'solo',
-    'cleanoutput',
-    'transparent'
-  ].join('&');
+    'solo'
+  ];
+
+  if (!debug) params.push('cleanoutput', 'transparent');
+
+  return 'https://vdo.ninja/?' + params.join('&');
 }
