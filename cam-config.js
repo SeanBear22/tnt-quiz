@@ -105,6 +105,13 @@ function vdoViewUrl(seat) {
   const debug = typeof location !== 'undefined'
     && location.search.indexOf('camdebug') !== -1;
 
+  // Load /viewer?noaudio for a silent copy of the viewer page. Each frame
+  // carries its own copy of the room audio, so anyone who also has the player
+  // or host page open hears everyone twice. OBS should use the plain /viewer
+  // URL; people should use this one.
+  const silent = typeof location !== 'undefined'
+    && location.search.indexOf('noaudio') !== -1;
+
   const params = [
     'view=' + encodeURIComponent(id),
     'room=' + encodeURIComponent(VDO.room),
@@ -117,6 +124,8 @@ function vdoViewUrl(seat) {
   // Zoom and crop the video so it fills the frame cutout instead of sitting
   // letterboxed inside it.
   params.push('cover');
+
+  if (silent) params.push('noaudio');
 
   const mirror = typeof VDO.mirror === 'object'
     ? !!VDO.mirror[seat]
