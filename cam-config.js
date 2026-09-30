@@ -57,10 +57,10 @@ const VDO = {
   // seat with an object, e.g. mirror: { player2: true }.
   mirror: false,
 
-  // Background blur strength, 1-10, used when someone ticks the blur box.
-  // 6 matches the setting that looked right in testing: the room is clearly
-  // softened but still reads as a room. Nudge it either way if needed.
-  blurStrength: 6
+  // Background blur strength when someone ticks the blur box. The scale is
+  // 0-20, not 0-10; &backgroundblur on its own defaults to a barely visible 2.
+  // 12 is roughly where the slider sat in testing.
+  blurStrength: 12
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
@@ -93,7 +93,7 @@ function vdoPushUrl(seat, options) {
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
   const blur = options && options.blur
-    ? ['backgroundblur=' + (VDO.blurStrength || 6)]
+    ? ['backgroundblur=' + (VDO.blurStrength || 12)]
     : [];
   return 'https://vdo.ninja/?' + blur.concat([
     'room=' + encodeURIComponent(VDO.room),
