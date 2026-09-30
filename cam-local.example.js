@@ -20,8 +20,8 @@ window.CAM_LOCAL = {
   // videoBitrate: 900,
 
   // Optional: background blur strength when someone ticks the blur box.
-  // The scale is 0-20. Default is 12.
-  // blurStrength: 16,
+  // Default is 8. Decimals work; keep it under 10.
+  // blurStrength: 6,
 
   // Optional: mirror the feeds on the viewer page. false (the default) shows
   // what the camera actually sees, so writing reads the right way round.

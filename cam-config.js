@@ -57,10 +57,10 @@ const VDO = {
   // seat with an object, e.g. mirror: { player2: true }.
   mirror: false,
 
-  // Background blur strength when someone ticks the blur box. The scale is
-  // 0-20, not 0-10; &backgroundblur on its own defaults to a barely visible 2.
-  // 12 is roughly where the slider sat in testing.
-  blurStrength: 12
+  // Background blur strength when someone ticks the blur box, passed as
+  // &effectvalue alongside &effects=3. Tested: 8 gives a heavy, Teams-style
+  // blur. Decimals work; VDO.Ninja advises keeping it under 10.
+  blurStrength: 8
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
@@ -80,10 +80,11 @@ if (typeof window !== 'undefined' && window.CAM_LOCAL) {
 // Link each person opens (embedded in the quiz page). Pushes their camera and
 // mic into the room, and plays back everyone else's audio.
 //
-// options.blur adds VDO.Ninja's segmentation-based background blur, using the
-// &backgroundblur alias so the strength comes with it. It is a URL parameter
-// rather than something switchable in place, so turning it on or off rebuilds
-// the frame and briefly reconnects.
+// options.blur adds VDO.Ninja's segmentation-based background blur as
+// &effects=3 with the strength in &effectvalue. The &backgroundblur alias was
+// tried first and barely blurred at any value, so it is not used. Blur is a URL
+// parameter rather than something switchable in place, so turning it on or off
+// rebuilds the frame and briefly reconnects.
 //
 // VDO.Ninja saves effect settings in its own localStorage against the room and
 // stream ID. A stored setting can win over the URL, so if blur does not take
@@ -93,7 +94,7 @@ function vdoPushUrl(seat, options) {
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
   const blur = options && options.blur
-    ? ['backgroundblur=' + (VDO.blurStrength || 12)]
+    ? ['effects=3', 'effectvalue=' + (VDO.blurStrength || 8)]
     : [];
   return 'https://vdo.ninja/?' + blur.concat([
     'room=' + encodeURIComponent(VDO.room),
