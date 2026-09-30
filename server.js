@@ -28,10 +28,36 @@ const VIEWER_DELAY_SECONDS = Number(process.env.VIEWER_DELAY_SECONDS || 0);
 
 // Code a player must enter to take a seat. /player is public, so without one
 // anyone who finds the address can sit down, answer, and put their camera on
-// the stream. Leave it unset for local testing; set it for any real show.
-const PLAYER_CODE = (process.env.PLAYER_CODE || '').trim();
-if (!PLAYER_CODE) {
-  console.warn('PLAYER_CODE not set. Anyone can take a seat without a join code.');
+// the stream.
+//
+// The host sets it from the host page. It is saved to a settings file beside
+// the question bank so a restart keeps it; PLAYER_CODE in the environment is
+// only the starting value used when no code has been saved yet.
+const SETTINGS_FILE = path.join(path.dirname(BANK_FILE), 'settings.json');
+
+function loadSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) || {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveSettings(settings) {
+  // Write to a temporary file then rename, so a crash mid-write can never
+  // leave a half-written settings file behind.
+  const tmp = SETTINGS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(settings, null, 2));
+  fs.renameSync(tmp, SETTINGS_FILE);
+}
+
+const savedSettings = loadSettings();
+let joinCode = typeof savedSettings.joinCode === 'string'
+  ? savedSettings.joinCode
+  : (process.env.PLAYER_CODE || '').trim();
+
+if (!joinCode) {
+  console.warn('No join code set. Anyone can take a seat until the host sets one.');
 }
 
 // Camera stream IDs are random and issued by the server, never fixed. The room
@@ -257,7 +283,7 @@ function buildState(role, ownSlot) {
     hostCardImage,
     // The host's feed, once the host page says its camera is publishing.
     hostStreamId: hostCamLive ? hostStreamId : null,
-    joinCodeRequired: !!PLAYER_CODE,
+    joinCodeRequired: !!joinCode,
     showRoundIntro,
     audio: {
       playing: audioPlaying,
@@ -272,6 +298,7 @@ function buildState(role, ownSlot) {
   // Only the host receives the loaded rounds, which contain every answer.
   if (isHost) {
     state.rounds = rounds;
+    state.joinCode = joinCode;
     // The host page needs its stream ID before the camera is up.
     state.myStreamId = hostStreamId;
   }
@@ -390,7 +417,7 @@ app.post('/api/audio/stop', requireHost, (req, res) => {
 
 app.post('/api/claim', (req, res) => {
   const { slot, name, code } = req.body;
-  if (PLAYER_CODE && !safeEqual(String(code || '').trim(), PLAYER_CODE)) {
+  if (joinCode && !safeEqual(String(code || '').trim(), joinCode)) {
     return res.status(403).json({ success: false, message: 'Wrong join code' });
   }
   if (!players[slot]) {
@@ -565,6 +592,20 @@ app.post('/api/next', requireHost, (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// Sets the join code for new seats. Players already seated keep their seats;
+// the code is only checked when someone sits down. An empty code turns the
+// check off.
+app.post('/api/host/joincode', requireHost, (req, res) => {
+  const code = typeof req.body.code === 'string' ? req.body.code.trim().slice(0, 40) : '';
+  try {
+    saveSettings(Object.assign(loadSettings(), { joinCode: code }));
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Could not save the join code' });
+  }
+  joinCode = code;
+  res.json({ success: true, joinCode });
 });
 
 app.post('/api/host/name', requireHost, (req, res) => {

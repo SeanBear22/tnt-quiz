@@ -15,7 +15,7 @@ lose the round bank and uploads on every restart.
 | --- | --- | --- |
 | `PORT` | `3000` | Port the server listens on. |
 | `BANK_FILE` | `./rounds-bank.json` | Path to the saved round library. Point this outside the repo in production so `git pull` cannot overwrite it. |
-| `PLAYER_CODE` | *(none)* | Join code players must enter to take a seat. Without it, anyone who finds `/player` can sit down and put their camera on the stream. Set it for any real show. |
+| `PLAYER_CODE` | *(none)* | Starting join code, used only until the host sets one on the host page. The host's code is saved to `settings.json` beside `BANK_FILE` and survives restarts. Without a code, anyone who finds `/player` can take a seat and put their camera on the stream. |
 | `UPLOAD_DIR` | `./uploads` | Where uploaded question/answer images are stored. Also served at `/uploads`. |
 
 Defaults match the original behaviour, so `npm start` locally needs no changes.

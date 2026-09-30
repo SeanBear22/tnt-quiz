@@ -35,6 +35,26 @@
       width: 200px;
     }
 
+    .topBar {
+      flex-wrap: wrap;
+    }
+
+    .topDivider {
+      width: 1px;
+      align-self: stretch;
+      background: #2d3b55;
+    }
+
+    #joinCodeStatus {
+      font-size: 0.9em;
+      color: #9fb3c8;
+    }
+
+    #joinCodeStatus.open {
+      color: #ffb400;
+      font-weight: bold;
+    }
+
     h2 {
       color: #ffb400;
       font-size: 1.2em;
@@ -511,6 +531,10 @@
     <input type="text" id="hostNameInput" autocomplete="off" placeholder="Your name (shows on viewer screen)">
     <button id="setHostNameButton">Set Name</button>
     <button id="openViewerButton">Open Viewer Screen</button>
+    <span class="topDivider"></span>
+    <input type="text" id="joinCodeInput" autocomplete="off" placeholder="Join code for players">
+    <button id="setJoinCodeButton">Set Code</button>
+    <span id="joinCodeStatus"></span>
   </div>
 
   <div class="layout">
@@ -820,6 +844,45 @@
       { q: null, a: null, audio: null },
       { q: null, a: null, audio: null }
     ];
+
+    // --- Join code --------------------------------------------------------
+    // Shows the code currently in force. Only changing it for new seats:
+    // anyone already sitting down keeps their seat.
+    let shownJoinCode = null;
+
+    function showJoinCode(code) {
+      if (code === shownJoinCode) return;
+      shownJoinCode = code;
+      const status = document.getElementById('joinCodeStatus');
+      if (code) {
+        status.textContent = 'Current code: ' + code;
+        status.className = '';
+      } else {
+        status.textContent = 'No code set: anyone can take a seat';
+        status.className = 'open';
+      }
+    }
+
+    document.getElementById('setJoinCodeButton').addEventListener('click', async () => {
+      const input = document.getElementById('joinCodeInput');
+      const code = input.value.trim();
+      if (!code && !confirm('Remove the join code? Anyone who finds the player page will be able to take a seat.')) {
+        return;
+      }
+      const response = await fetch('/api/host/joincode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const result = await response.json();
+      if (result.success) {
+        input.value = '';
+        shownJoinCode = null;
+        showJoinCode(result.joinCode);
+      } else {
+        alert(result.message || 'Could not set the join code');
+      }
+    });
 
     document.getElementById('setHostNameButton').addEventListener('click', async () => {
       const name = document.getElementById('hostNameInput').value;
@@ -1320,6 +1383,7 @@
       const players = state.players;
 
       mountHostCamera(state.myStreamId);
+      showJoinCode(state.joinCode || '');
       QuizAudio.sync(state);
       const clipHere = state.gameStarted && !state.showRoundIntro
         && state.currentQuestion && state.currentQuestion.questionAudio;
