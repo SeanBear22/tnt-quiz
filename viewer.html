@@ -372,6 +372,15 @@
   <script src="cam-config.js"></script>
   <script src="quiz-audio.js"></script>
   <script>
+    // Everything typed by a person (names, answers, questions, round titles)
+    // goes through this before being placed in the page, so it is shown as
+    // text and can never run as code on the stream.
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function buildWinnerHtml(players) {
       const joined = Object.values(players).filter(p => p.name);
 
@@ -385,10 +394,10 @@
 
       const winnerLine = winners.length > 1
         ? `IT'S A TIE! (${maxScore} pts)`
-        : `${winners[0].name.toUpperCase()} (${maxScore} pts)`;
+        : `${esc(winners[0].name.toUpperCase())} (${maxScore} pts)`;
 
       const scoreboardHtml = sorted
-        .map(p => `${p.name}: ${p.score}`)
+        .map(p => `${esc(p.name)}: ${p.score}`)
         .join('<br>');
 
       return `
@@ -426,9 +435,11 @@
       if (hostCard) {
         hostCard.classList.toggle('visible', !!state.hostCameraOff);
         hostCard.style.backgroundImage = state.hostCardImage
-          ? `url('/uploads/${state.hostCardImage}')`
+          ? `url('/uploads/${encodeURIComponent(state.hostCardImage)}')`
           : 'none';
       }
+
+      setFeed(document.querySelector('#hostBox .camWindowOverlay'), 'host', state.hostStreamId);
 
       QuizAudio.sync(state);
 
@@ -437,7 +448,7 @@
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
         setQuestionHtml(questionBox,
-          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}</div>` +
+          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}</div>` +
           frameOverlayHtml);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
@@ -450,17 +461,17 @@
           // An image always wins. An audio question with no image shows the
           // clip's waveform in the same space instead.
           const mediaHtml = imgSrc
-            ? `<img src="/uploads/${imgSrc}">`
-            : `<canvas class="waveform" data-src="/uploads/${q.questionAudio}"></canvas>`;
+            ? `<img src="/uploads/${esc(imgSrc)}">`
+            : `<canvas class="waveform" data-src="/uploads/${esc(q.questionAudio)}"></canvas>`;
 
           // The toggle governs the question text only. A revealed answer is
           // always shown, since otherwise it would be unreadable unless the
           // answer had an image of its own.
           let textHtml = q.showText === false
             ? ''
-            : `Q${state.currentQuestionIndex + 1}: ${q.question}`;
+            : `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
           if (state.revealed) {
-            textHtml += `<div class="answerLine">${q.answer}</div>`;
+            textHtml += `<div class="answerLine">${esc(q.answer)}</div>`;
           }
 
           const posClass = q.textPosition === 'top'
@@ -477,9 +488,9 @@
             ${frameOverlayHtml}
           `);
         } else {
-          let html = `Q${state.currentQuestionIndex + 1}: ${q.question}`;
+          let html = `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
           if (state.revealed) {
-            html += `<div class="answerLine">${q.answer}</div>`;
+            html += `<div class="answerLine">${esc(q.answer)}</div>`;
           }
           setQuestionHtml(questionBox, `<div class="qTextOnly">${html}</div>` + frameOverlayHtml);
         }
@@ -506,9 +517,11 @@
         if (card) {
           card.classList.toggle('visible', !!info.cameraOff);
           card.style.backgroundImage = info.cardImage
-            ? `url('/uploads/${info.cardImage}')`
+            ? `url('/uploads/${encodeURIComponent(info.cardImage)}')`
             : 'none';
         }
+
+        setFeed(el.querySelector('.camWindowOverlay'), slot, info.streamId);
         if (state.revealed && info.correct === true) {
           frameImg.src = 'player-frame-green.png';
         } else if (state.revealed && info.correct === false) {
@@ -519,46 +532,40 @@
       });
     }
 
-    // Drop each person's feed into the cutout already present in their frame.
-    // The frame PNG sits above this at z-index 2, so the green/red/grey swap
-    // keeps working over the video.
-    function mountCameras() {
-      document.querySelectorAll('[data-slot]').forEach(el => {
-        const overlay = el.querySelector('.camWindowOverlay');
-        if (!overlay) return;
-        const url = vdoViewUrl(el.dataset.slot);
-        if (!url) return;
+    // Each frame's cutout holds the person's feed (an iframe) and their card.
+    // A feed is only shown once the server says that seat's camera is live,
+    // using the random stream ID it issued, so an empty seat shows nothing and
+    // nobody else can publish into it. The frame PNG sits above at z-index 2,
+    // so the green/red/grey swap keeps working over the video.
+    function prepareCutouts() {
+      document.querySelectorAll('.camWindowOverlay').forEach(overlay => {
         overlay.textContent = '';
-        const frame = document.createElement('iframe');
-        frame.src = url;
-        frame.allow = 'autoplay';
-        frame.scrolling = 'no';
-        overlay.appendChild(frame);
-
         const card = document.createElement('div');
         card.className = 'cardOverlay';
         overlay.appendChild(card);
       });
-
-      const hostOverlay = document.querySelector('#hostBox .camWindowOverlay');
-      if (hostOverlay) {
-        const url = vdoViewUrl('host');
-        if (url) {
-          hostOverlay.textContent = '';
-          const frame = document.createElement('iframe');
-          frame.src = url;
-          frame.allow = 'autoplay';
-          frame.scrolling = 'no';
-          hostOverlay.appendChild(frame);
-
-          const card = document.createElement('div');
-          card.className = 'cardOverlay';
-          hostOverlay.appendChild(card);
-        }
-      }
     }
 
-    mountCameras();
+    function setFeed(overlay, seat, streamId) {
+      if (!overlay) return;
+      const wanted = streamId || '';
+      if ((overlay.dataset.stream || '') === wanted) return;
+      overlay.dataset.stream = wanted;
+
+      const old = overlay.querySelector('iframe');
+      if (old) old.remove();
+      if (!wanted) return;
+
+      const url = vdoViewUrl(seat, wanted);
+      if (!url) return;
+      const frame = document.createElement('iframe');
+      frame.src = url;
+      frame.allow = 'autoplay';
+      frame.scrolling = 'no';
+      overlay.insertBefore(frame, overlay.firstChild);
+    }
+
+    prepareCutouts();
 
     setInterval(refreshViewer, 1000);
     refreshViewer();

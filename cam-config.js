@@ -8,8 +8,8 @@
 // cam-local.js and edit that instead of this file, so a git pull never
 // collides with local settings. See the bottom of this file.
 //
-// Audio and video travel together in one stream per person, so they stay in
-// sync with no offset needed anywhere.
+// Voice goes through Discord. Every camera joins with its mic muted, so no
+// audio is sent unless someone deliberately unmutes with the Mic button.
 
 const VDO = {
   // Shared room. Change the password before the first real session; anyone
@@ -17,18 +17,10 @@ const VDO = {
   room: 'tntquiz',
   password: 'change-me-before-going-live',
 
-  // Stream ID per seat. These are what the viewer page views, so they must
-  // match what each person pushes.
-  // Underscores, not hyphens. VDO.Ninja sanitises stream IDs when publishing
-  // and a hyphen comes back as an underscore, so a hyphenated ID here
-  // publishes as something the viewer link never finds.
-  streamIds: {
-    host: 'tnt_host',
-    player1: 'tnt_p1',
-    player2: 'tnt_p2',
-    player3: 'tnt_p3',
-    player4: 'tnt_p4'
-  },
+  // Stream IDs are not configured here. The server issues a random one per
+  // seat when it is claimed (and one for the host), because the room password
+  // is visible to every browser and fixed IDs could be taken by a stranger
+  // before the real player arrived.
 
   // Audio chain applied at the source, so each person can be tuned to their
   // own room. lowcut removes desk rumble and fan hum; compressor evens out
@@ -66,12 +58,13 @@ const VDO = {
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
-// streamIds and audioChain are merged key by key so a local file can override
-// one seat without restating all of them.
+// audioChain is merged key by key so a local file can override one seat
+// without restating all of them. streamIds is ignored if present.
 if (typeof window !== 'undefined' && window.CAM_LOCAL) {
   const local = window.CAM_LOCAL;
   Object.keys(local).forEach(key => {
-    if (key === 'streamIds' || key === 'audioChain') {
+    if (key === 'streamIds') return;
+    if (key === 'audioChain') {
       Object.assign(VDO[key], local[key]);
     } else {
       VDO[key] = local[key];
@@ -92,7 +85,7 @@ if (typeof window !== 'undefined' && window.CAM_LOCAL) {
 // stream ID. A stored setting can win over the URL, so if blur does not take
 // effect, clear site data for vdo.ninja in the browser.
 function vdoPushUrl(seat, options) {
-  const id = VDO.streamIds[seat];
+  const id = options && options.streamId;
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
   const blur = options && options.blur
@@ -103,6 +96,9 @@ function vdoPushUrl(seat, options) {
     'password=' + encodeURIComponent(VDO.password),
     'push=' + encodeURIComponent(id),
     'webcam',
+    // Start with the mic muted. Voice goes through Discord; the Mic button can
+    // still unmute it if it is ever needed.
+    'mute',
     // Without autostart the guest is shown VDO.Ninja's join screen with a
     // START button. Camera permission is not requested until that is clicked,
     // and device labels stay blank until permission is granted.
@@ -118,9 +114,10 @@ function vdoPushUrl(seat, options) {
 }
 
 // Link the viewer page uses per frame. Pulls one person's stream, with the UI
-// stripped so only the picture lands inside the frame cutout.
-function vdoViewUrl(seat) {
-  const id = VDO.streamIds[seat];
+// stripped so only the picture lands inside the frame cutout. The stream ID
+// comes from the server's state, and only once that seat's camera is live.
+function vdoViewUrl(seat, streamId) {
+  const id = streamId;
   if (!id) return null;
 
   // Load /viewer?camdebug to keep VDO.Ninja's own UI and messages visible.

@@ -7,8 +7,6 @@
 window.CAM_LOCAL = {
   password: 'set-a-real-password-here',
 
-  // Optional: rename seats if your stream IDs differ.
-  // streamIds: { player1: 'tnt-troy' },
 
   // Optional: give one person a heavier audio chain without restating the
   // others. The gate is aggressive, so only use it where it is needed.

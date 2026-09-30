@@ -26,9 +26,39 @@ if (!process.env.HOST_SECRET) {
 // step with what they are actually watching. 0 disables the delay.
 const VIEWER_DELAY_SECONDS = Number(process.env.VIEWER_DELAY_SECONDS || 0);
 
+// Code a player must enter to take a seat. /player is public, so without one
+// anyone who finds the address can sit down, answer, and put their camera on
+// the stream. Leave it unset for local testing; set it for any real show.
+const PLAYER_CODE = (process.env.PLAYER_CODE || '').trim();
+if (!PLAYER_CODE) {
+  console.warn('PLAYER_CODE not set. Anyone can take a seat without a join code.');
+}
+
+// Camera stream IDs are random and issued by the server, never fixed. The room
+// password has to be readable by every browser that joins, so a fixed, guessable
+// ID would let a stranger publish into a seat before its player arrived.
+function newStreamId(prefix) {
+  return prefix + '_' + crypto.randomBytes(5).toString('hex');
+}
+
 app.use(express.json());
-app.use(express.static(__dirname));
-app.use('/uploads', express.static(UPLOAD_DIR));
+
+// Only files the pages actually use are served from the app folder: images at
+// the top level and the three browser scripts. Serving the whole folder
+// exposed the git repo, the server source, the seed question bank and more.
+const PUBLIC_SCRIPTS = new Set(['cam-config.js', 'cam-local.js', 'quiz-audio.js']);
+const PUBLIC_IMAGE = /^[\w.-]+\.(png|jpe?g|gif|webp|svg|ico)$/i;
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const name = req.path.slice(1);
+  if (name.includes('/')) return next();
+  if (!PUBLIC_SCRIPTS.has(name) && !PUBLIC_IMAGE.test(name)) return next();
+  res.sendFile(path.join(__dirname, name), { dotfiles: 'deny' }, err => {
+    if (err) next();
+  });
+});
+app.use('/uploads', express.static(UPLOAD_DIR, { dotfiles: 'deny', index: false }));
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -73,9 +103,13 @@ function emptyPlayer() {
     correct: null,
     score: 0,
     token: null,
-    micMuted: false,
+    micMuted: true,
     cameraOff: false,
-    cardImage: null
+    cardImage: null,
+    // Issued on claim. Only shown to the viewer once the player's camera
+    // reports it is publishing, which leaves no gap for anyone else to take it.
+    streamId: null,
+    camLive: false
   };
 }
 
@@ -107,6 +141,8 @@ function stopAudio() {
 }
 let hostCameraOff = false;
 let hostCardImage = null;
+let hostStreamId = newStreamId('tnt_host');
+let hostCamLive = false;
 let showRoundIntro = false;
 let bankedRounds = [];
 
@@ -194,7 +230,8 @@ function projectPlayers(isHost, ownSlot) {
       score: player.score,
       micMuted: player.micMuted,
       cameraOff: player.cameraOff,
-      cardImage: player.cardImage
+      cardImage: player.cardImage,
+      streamId: player.camLive ? player.streamId : null
     };
   }
   return out;
@@ -218,6 +255,9 @@ function buildState(role, ownSlot) {
     hostName,
     hostCameraOff,
     hostCardImage,
+    // The host's feed, once the host page says its camera is publishing.
+    hostStreamId: hostCamLive ? hostStreamId : null,
+    joinCodeRequired: !!PLAYER_CODE,
     showRoundIntro,
     audio: {
       playing: audioPlaying,
@@ -230,7 +270,19 @@ function buildState(role, ownSlot) {
   };
 
   // Only the host receives the loaded rounds, which contain every answer.
-  if (isHost) state.rounds = rounds;
+  if (isHost) {
+    state.rounds = rounds;
+    // The host page needs its stream ID before the camera is up.
+    state.myStreamId = hostStreamId;
+  }
+
+  // A player's page learns which seat the server thinks it holds, rather than
+  // trusting what it remembered locally, plus the stream ID to publish on.
+  if (role === 'player') {
+    state.you = ownSlot
+      ? { slot: ownSlot, streamId: players[ownSlot].streamId }
+      : null;
+  }
 
   return state;
 }
@@ -337,14 +389,23 @@ app.post('/api/audio/stop', requireHost, (req, res) => {
 });
 
 app.post('/api/claim', (req, res) => {
-  const { slot, name } = req.body;
-  if (players[slot] && players[slot].name === null) {
-    const token = crypto.randomBytes(18).toString('hex');
-    players[slot].name = typeof name === 'string' ? name.slice(0, 40) : 'Player';
-    players[slot].token = token;
-    return res.json({ success: true, token });
+  const { slot, name, code } = req.body;
+  if (PLAYER_CODE && !safeEqual(String(code || '').trim(), PLAYER_CODE)) {
+    return res.status(403).json({ success: false, message: 'Wrong join code' });
   }
-  res.json({ success: false, message: 'Slot already taken' });
+  if (!players[slot]) {
+    return res.json({ success: false, message: 'No such seat' });
+  }
+  if (players[slot].name !== null) {
+    return res.json({ success: false, message: 'Slot already taken' });
+  }
+  const cleanName = typeof name === 'string' ? name.trim().slice(0, 40) : '';
+  const token = crypto.randomBytes(18).toString('hex');
+  players[slot].name = cleanName || 'Player';
+  players[slot].token = token;
+  players[slot].streamId = newStreamId('tnt_' + slot.replace('player', 'p'));
+  players[slot].camLive = false;
+  res.json({ success: true, token, streamId: players[slot].streamId });
 });
 
 app.post('/api/submit', (req, res) => {
@@ -352,6 +413,9 @@ app.post('/api/submit', (req, res) => {
   const slot = slotForToken(req);
   if (!slot) {
     return res.status(401).json({ success: false, message: 'Claim a player slot first' });
+  }
+  if (revealed) {
+    return res.status(409).json({ success: false, message: 'Answers are closed' });
   }
   players[slot].answer = typeof answer === 'string' ? answer.slice(0, 500) : '';
   res.json({ success: true });
@@ -380,8 +444,8 @@ app.post('/api/mark', requireHost, (req, res) => {
 
 app.post('/api/score/adjust', requireHost, (req, res) => {
   const { slot, delta } = req.body;
-  if (players[slot]) {
-    players[slot].score += delta;
+  if (players[slot] && Number.isFinite(Number(delta))) {
+    players[slot].score += Number(delta);
   }
   res.json({ success: true });
 });
@@ -523,6 +587,7 @@ app.get('/api/state', (req, res) => {
 // player-authenticated, since the host holds no player slot.
 app.post('/api/host/status', requireHost, (req, res) => {
   if (typeof req.body.cameraOff === 'boolean') hostCameraOff = req.body.cameraOff;
+  if (typeof req.body.camLive === 'boolean') hostCamLive = req.body.camLive;
   res.json({ success: true, cameraOff: hostCameraOff });
 });
 
@@ -552,6 +617,7 @@ app.post('/api/player/status', requirePlayer, (req, res) => {
   const player = players[req.playerSlot];
   if (typeof req.body.micMuted === 'boolean') player.micMuted = req.body.micMuted;
   if (typeof req.body.cameraOff === 'boolean') player.cameraOff = req.body.cameraOff;
+  if (typeof req.body.camLive === 'boolean') player.camLive = req.body.camLive;
   res.json({ success: true, micMuted: player.micMuted, cameraOff: player.cameraOff });
 });
 

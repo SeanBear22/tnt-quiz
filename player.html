@@ -327,7 +327,7 @@
 
     <div id="camControls">
       <div class="row">
-        <button id="micBtn" type="button">Mic on</button>
+        <button id="micBtn" type="button" class="off">Mic MUTED</button>
         <button id="camBtn" type="button">Camera on</button>
       </div>
       <label for="micSelect">Microphone</label>
@@ -356,7 +356,16 @@
     let myToken = localStorage.getItem('tntQuizToken');
     let mySlot = localStorage.getItem('tntQuizSlot');
     let hasLockedIn = false;
+    let answersClosed = false;
     let restoredFromStorage = false;
+    let lastState = null;
+
+    // Everything typed by a person is shown as text, never run as code.
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
 
     document.getElementById('openViewerButton').addEventListener('click', () => {
       window.open('/viewer', '_blank');
@@ -375,10 +384,10 @@
 
       const winnerLine = winners.length > 1
         ? `IT'S A TIE! (${maxScore} pts)`
-        : `${winners[0].name.toUpperCase()} (${maxScore} pts)`;
+        : `${esc(winners[0].name.toUpperCase())} (${maxScore} pts)`;
 
       const scoreboardHtml = sorted
-        .map(p => `${p.name}: ${p.score}`)
+        .map(p => `${esc(p.name)}: ${p.score}`)
         .join('<br>');
 
       return `
@@ -413,12 +422,16 @@
       });
       const state = await response.json();
       const players = state.players;
+      lastState = state;
 
-      if (mySlot && players[mySlot] && !players[mySlot].name) {
-        mySlot = null;
-        myToken = null;
-        localStorage.removeItem('tntQuizSlot');
-        localStorage.removeItem('tntQuizToken');
+      // The server, not this browser's memory, decides which seat we hold.
+      // If the seat was released or the server restarted, let it go and stop
+      // the camera, so it is not left publishing into a seat we no longer own.
+      if (mySlot && (!state.you || state.you.slot !== mySlot)) {
+        loseSeat();
+      }
+      if (state.you && mySlot === state.you.slot) {
+        mountSelfCamera(mySlot, state.you.streamId);
       }
 
       QuizAudio.sync(state);
@@ -426,22 +439,22 @@
       const questionBox = document.getElementById('questionDisplay');
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
-        setQuestionHtml(questionBox, `ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}`);
+        setQuestionHtml(questionBox, `ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}`);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         let html = '';
         if (q.questionImage) {
-          html += `<img class="qaImage" src="/uploads/${q.questionImage}">`;
+          html += `<img class="qaImage" src="/uploads/${esc(q.questionImage)}">`;
         } else if (q.questionAudio) {
-          html += `<canvas class="waveform" data-src="/uploads/${q.questionAudio}"></canvas>`;
+          html += `<canvas class="waveform" data-src="/uploads/${esc(q.questionAudio)}"></canvas>`;
         }
-        html += `Q${state.currentQuestionIndex + 1}: ${q.question}`;
+        html += `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
         if (state.revealed) {
           html += `<div class="answerLine">`;
           if (q.answerImage) {
-            html += `<img class="qaImage" src="/uploads/${q.answerImage}"><br>`;
+            html += `<img class="qaImage" src="/uploads/${esc(q.answerImage)}"><br>`;
           }
-          html += `${q.answer}</div>`;
+          html += `${esc(q.answer)}</div>`;
         }
         setQuestionHtml(questionBox, html);
       } else if (state.gameStarted) {
@@ -489,6 +502,22 @@
           statusText.className = '';
         }
 
+        // Answering closes the moment the answer is revealed.
+        if (state.revealed && !hasLockedIn && !answersClosed) {
+          answersClosed = true;
+          document.getElementById('answerInput').disabled = true;
+          document.getElementById('lockButton').disabled = true;
+          statusText.textContent = 'Answers are closed';
+          statusText.className = '';
+        } else if (!state.revealed && answersClosed) {
+          answersClosed = false;
+          document.getElementById('answerInput').disabled = false;
+          document.getElementById('answerInput').value = '';
+          document.getElementById('lockButton').disabled = false;
+          statusText.textContent = '';
+          statusText.className = '';
+        }
+
         const webcamBox = document.getElementById('camSelf');
         if (state.revealed && myInfo.correct === true) {
           webcamBox.style.borderColor = '#2ecc71';
@@ -512,12 +541,18 @@
 
         const slot = btn.dataset.slot;
         const name = prompt('Enter your name:');
-        if (!name) return;
+        if (!name || !name.trim()) return;
+
+        let code = '';
+        if (lastState && lastState.joinCodeRequired) {
+          code = prompt('Enter the join code:');
+          if (code === null) return;
+        }
 
         const response = await fetch('/api/claim', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ slot, name })
+          body: JSON.stringify({ slot, name, code })
         });
         const result = await response.json();
 
@@ -526,7 +561,7 @@
           myToken = result.token;
           localStorage.setItem('tntQuizSlot', slot);
           localStorage.setItem('tntQuizToken', result.token);
-          mountSelfCamera(slot);
+          mountSelfCamera(slot, result.streamId);
           document.getElementById('whoAmI').textContent = `${name}/Player${slot.slice(-1)}`;
           document.getElementById('answerArea').style.display = 'block';
         } else {
@@ -555,6 +590,8 @@
         document.getElementById('statusText').textContent = 'Answer locked in! Waiting for reveal...';
         document.getElementById('answerInput').disabled = true;
         document.getElementById('lockButton').disabled = true;
+      } else if (result.message) {
+        document.getElementById('statusText').textContent = result.message;
       }
     });
 
@@ -564,9 +601,16 @@
     // mic-off badge or swap in the card.
 
     let camFrame = null;
-    let micOn = true;
+    let micOn = false;        // cameras join muted; voice is on Discord
     let cameraOn = true;
     let devicesNamed = false;
+    let currentStreamId = null;
+
+    function showMicState() {
+      const btn = document.getElementById('micBtn');
+      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
+      btn.classList.toggle('off', !micOn);
+    }
 
     function toFrame(message) {
       if (camFrame && camFrame.contentWindow) {
@@ -586,7 +630,7 @@
             'Content-Type': 'application/json',
             'X-Player-Token': myToken || ''
           },
-          body: JSON.stringify({ micMuted: !micOn, cameraOff: !cameraOn })
+          body: JSON.stringify({ micMuted: !micOn, cameraOff: !cameraOn, camLive: camMounted })
         });
       } catch (err) {
         note('Could not reach the server');
@@ -596,9 +640,7 @@
     document.getElementById('micBtn').addEventListener('click', () => {
       micOn = !micOn;
       toFrame({ mic: micOn });
-      const btn = document.getElementById('micBtn');
-      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
-      btn.classList.toggle('off', !micOn);
+      showMicState();
       reportStatus();
     });
 
@@ -723,9 +765,34 @@
       return localStorage.getItem('tntQuizBlur') === '1';
     }
 
-    function mountSelfCamera(slot) {
-      if (camMounted || !slot) return;
-      const url = vdoPushUrl(slot, { blur: blurWanted() });
+    function unmountSelfCamera() {
+      const holder = document.getElementById('camSelf');
+      holder.textContent = '';
+      holder.style.display = 'none';
+      document.getElementById('camControls').style.display = 'none';
+      camFrame = null;
+      camMounted = false;
+      currentStreamId = null;
+      devicesNamed = false;
+    }
+
+    function loseSeat() {
+      mySlot = null;
+      myToken = null;
+      localStorage.removeItem('tntQuizSlot');
+      localStorage.removeItem('tntQuizToken');
+      unmountSelfCamera();
+      restoredFromStorage = false;
+      document.getElementById('answerArea').style.display = 'none';
+      document.getElementById('whoAmI').textContent = '';
+    }
+
+    // Publishes on the stream ID the server issued for this seat. Called on
+    // every refresh; does nothing unless the ID has changed.
+    function mountSelfCamera(slot, streamId) {
+      if (!slot || !streamId) return;
+      if (camMounted && currentStreamId === streamId) return;
+      const url = vdoPushUrl(slot, { blur: blurWanted(), streamId });
       if (!url) return;
       const holder = document.getElementById('camSelf');
       holder.textContent = '';
@@ -737,6 +804,9 @@
       holder.style.display = 'block';
       camFrame = frame;
       camMounted = true;
+      currentStreamId = streamId;
+      micOn = false;            // a fresh camera always starts muted
+      showMicState();
 
       document.getElementById('camControls').style.display = 'block';
       document.getElementById('blurInput').checked = blurWanted();
@@ -757,15 +827,14 @@
 
     document.getElementById('blurInput').addEventListener('change', event => {
       localStorage.setItem('tntQuizBlur', event.target.checked ? '1' : '0');
-      if (!mySlot) return;
+      if (!mySlot || !currentStreamId) return;
       note('Restarting camera...');
+      const id = currentStreamId;
       camMounted = false;
       camFrame = null;
       devicesNamed = false;
-      mountSelfCamera(mySlot);
+      mountSelfCamera(mySlot, id);
     });
-
-    if (mySlot) mountSelfCamera(mySlot);
 
     setInterval(refreshButtons, 1000);
     refreshButtons();

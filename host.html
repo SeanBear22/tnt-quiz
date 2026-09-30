@@ -487,7 +487,7 @@
   <div id="camPanel">
     <div id="camControls">
       <div class="row">
-        <button id="micBtn" type="button">Mic on</button>
+        <button id="micBtn" type="button" class="off">Mic MUTED</button>
         <button id="camBtn" type="button">Camera on</button>
       </div>
       <label for="micSelect">Microphone</label>
@@ -612,9 +612,25 @@
     // player slot, so nothing is reported to the server: these are local.
 
     let camFrame = null;
-    let micOn = true;
+    let micOn = false;        // the camera joins muted; voice is on Discord
     let cameraOn = true;
     let devicesNamed = false;
+    let hostStreamId = null;  // issued by the server
+
+    // Everything typed by a person is shown as text, never run as code. Player
+    // names and answers arrive from outside, so this matters on this page most:
+    // it holds the host secret.
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showMicState() {
+      const btn = document.getElementById('micBtn');
+      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
+      btn.classList.toggle('off', !micOn);
+    }
 
     function toFrame(message) {
       if (camFrame && camFrame.contentWindow) {
@@ -629,9 +645,7 @@
     document.getElementById('micBtn').addEventListener('click', () => {
       micOn = !micOn;
       toFrame({ mic: micOn });
-      const btn = document.getElementById('micBtn');
-      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
-      btn.classList.toggle('off', !micOn);
+      showMicState();
     });
 
     async function reportStatus() {
@@ -639,7 +653,7 @@
         await fetch('/api/host/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cameraOff: !cameraOn })
+          body: JSON.stringify({ cameraOff: !cameraOn, camLive: !!camFrame })
         });
       } catch (err) {
         note('Could not reach the server');
@@ -757,8 +771,14 @@
       return localStorage.getItem('tntQuizHostBlur') === '1';
     }
 
-    function mountHostCamera() {
-      const url = vdoPushUrl('host', { blur: blurWanted() });
+    // Publishes on the stream ID the server issued for the host. Called with
+    // every state refresh; does nothing unless the ID has changed, which
+    // happens when the server restarts.
+    function mountHostCamera(streamId, force) {
+      if (!streamId) return;
+      if (!force && streamId === hostStreamId && camFrame) return;
+      hostStreamId = streamId;
+      const url = vdoPushUrl('host', { blur: blurWanted(), streamId });
       if (!url) return;
       const holder = document.getElementById('camSelf');
       holder.textContent = '';
@@ -768,6 +788,9 @@
       frame.scrolling = 'no';
       holder.appendChild(frame);
       camFrame = frame;
+      micOn = false;            // a fresh camera always starts muted
+      showMicState();
+      reportStatus();
 
       // Device labels stay blank until the browser has granted camera
       // permission, which happens a little after the frame loads. Ask a few
@@ -786,10 +809,8 @@
       localStorage.setItem('tntQuizHostBlur', event.target.checked ? '1' : '0');
       note('Restarting camera...');
       devicesNamed = false;
-      mountHostCamera();
+      mountHostCamera(hostStreamId, true);
     });
-
-    mountHostCamera();
     let bankCache = [];
     let editingId = null;
     let rowImages = [
@@ -1273,7 +1294,7 @@
 
         const header = document.createElement('div');
         header.className = 'roundHeader';
-        header.innerHTML = `<span>Round ${index + 1}: ${round.title}</span><span>▾</span>`;
+        header.innerHTML = `<span>Round ${index + 1}: ${esc(round.title)}</span><span>▾</span>`;
 
         const questionsDiv = document.createElement('div');
         questionsDiv.className = 'roundQuestions';
@@ -1298,6 +1319,7 @@
       const state = await response.json();
       const players = state.players;
 
+      mountHostCamera(state.myStreamId);
       QuizAudio.sync(state);
       const clipHere = state.gameStarted && !state.showRoundIntro
         && state.currentQuestion && state.currentQuestion.questionAudio;
@@ -1348,7 +1370,7 @@
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'info';
-        infoDiv.innerHTML = `<span class="name">${name}</span> — ${answerText}`;
+        infoDiv.innerHTML = `<span class="name">${esc(name)}</span> — ${esc(answerText)}`;
         row.appendChild(infoDiv);
 
         const scoreDiv = document.createElement('div');
