@@ -117,6 +117,27 @@ function pickQuote() {
 // Start with something on screen, and replace a line that no longer exists.
 if (!currentQuote || !readQuotes().includes(currentQuote)) pickQuote();
 
+// Picks up edits made after start-up. Checking the file's modification time
+// is cheap enough to do on every state request; the file itself is only
+// re-read when it has changed. If the line on screen has been removed or
+// reworded, a new one replaces it straight away rather than at the next
+// REVEAL. An empty screen fills in as soon as lines are added.
+let quotesFileStamp = null;
+
+function checkQuotesFile() {
+  let stamp;
+  try {
+    const info = fs.statSync(QUOTES_FILE);
+    stamp = info.mtimeMs + ':' + info.size;
+  } catch (err) {
+    stamp = 'missing';
+  }
+  if (stamp === quotesFileStamp) return;
+  quotesFileStamp = stamp;
+  if (!currentQuote || !readQuotes().includes(currentQuote)) pickQuote();
+}
+checkQuotesFile();
+
 // Camera stream IDs are random and issued by the server, never fixed. The room
 // password has to be readable by every browser that joins, so a fixed, guessable
 // ID would let a stranger publish into a seat before its player arrived.
@@ -330,6 +351,7 @@ function projectPlayers(isHost, ownSlot) {
 }
 
 function buildState(role, ownSlot) {
+  checkQuotesFile();
   const isHost = role === 'host';
   const currentRound = rounds[currentRoundIndex] || null;
   const currentQuestion = currentRound ? currentRound.questions[currentQuestionIndex] : null;
