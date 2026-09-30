@@ -108,6 +108,35 @@
       display: none;
     }
 
+    .audioPreview {
+      height: 28px;
+      max-width: 170px;
+      display: none;
+    }
+
+    .uploadNote {
+      font-size: 0.75em;
+      color: #9fb3c8;
+      margin-left: 4px;
+    }
+
+    #audioControls {
+      display: none;
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    #audioControls button {
+      flex: 1;
+      font-size: 1.1em;
+      padding: 10px;
+    }
+
+    #audioPlayButton {
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+
     button {
       background: #0f3460;
       color: #fff;
@@ -515,6 +544,10 @@
         <p id="currentRoundText"></p>
         <p id="currentQuestionText"></p>
         <p id="currentAnswerText"></p>
+        <div id="audioControls">
+          <button id="audioPlayButton" type="button">&#9654; PLAY CLIP</button>
+          <button id="audioStopButton" type="button">&#9632; STOP</button>
+        </div>
         <button id="startButton">START GAME</button>
         <button id="startRoundButton" style="display:none;">START ROUND</button>
       </div>
@@ -533,6 +566,7 @@
 
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
+  <script src="quiz-audio.js"></script>
   <script>
     // Every /api/ call from this page carries the host secret. It is kept in
     // sessionStorage so it is entered once per browser session and never
@@ -759,11 +793,11 @@
     let bankCache = [];
     let editingId = null;
     let rowImages = [
-      { q: null, a: null },
-      { q: null, a: null },
-      { q: null, a: null },
-      { q: null, a: null },
-      { q: null, a: null }
+      { q: null, a: null, audio: null },
+      { q: null, a: null, audio: null },
+      { q: null, a: null, audio: null },
+      { q: null, a: null, audio: null },
+      { q: null, a: null, audio: null }
     ];
 
     document.getElementById('setHostNameButton').addEventListener('click', async () => {
@@ -798,10 +832,17 @@
             <button type="button" class="removeImgBtn qRemoveBtn" data-row="${i}">Remove</button>
           </div>
           <input type="file" class="qImgFile" data-row="${i}" accept="image/*" style="display:none;">
+          <button type="button" class="imgBtn qAudioBtn" data-row="${i}">&#127925; Add Audio</button>
+          <span class="uploadNote qAudioNote" data-row="${i}"></span>
+          <div class="imgPreviewWrap">
+            <audio class="audioPreview qAudioPreview" data-row="${i}" controls preload="none"></audio>
+            <button type="button" class="removeImgBtn qAudioRemoveBtn" data-row="${i}">Remove</button>
+          </div>
+          <input type="file" class="qAudioFile" data-row="${i}" accept="audio/*" style="display:none;">
           <div class="textOpts">
             <label class="showTextLabel">
               <input type="checkbox" class="showTextInput" data-row="${i}" checked>
-              Show text over image
+              Show text over image or waveform
             </label>
             <select class="textPosInput" data-row="${i}">
               <option value="top">Top</option>
@@ -880,6 +921,64 @@
       });
     });
 
+    function setAudioPreview(row, filename) {
+      const preview = document.querySelector(`.qAudioPreview[data-row="${row}"]`);
+      const removeBtn = document.querySelector(`.qAudioRemoveBtn[data-row="${row}"]`);
+      if (filename) {
+        preview.src = '/uploads/' + filename;
+        preview.style.display = 'inline-block';
+        removeBtn.style.display = 'inline-block';
+      } else {
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        removeBtn.style.display = 'none';
+      }
+    }
+
+    function audioNote(row, text) {
+      const el = document.querySelector(`.qAudioNote[data-row="${row}"]`);
+      if (el) el.textContent = text || '';
+    }
+
+    document.querySelectorAll('.qAudioBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelector(`.qAudioFile[data-row="${btn.dataset.row}"]`).click();
+      });
+    });
+
+    document.querySelectorAll('.qAudioFile').forEach(input => {
+      input.addEventListener('change', async () => {
+        const row = parseInt(input.dataset.row);
+        const file = input.files[0];
+        if (!file) return;
+        audioNote(row, 'Uploading...');
+        const form = new FormData();
+        form.append('audio', file);
+        try {
+          const response = await fetch('/api/upload/audio', { method: 'POST', body: form });
+          const result = await response.json();
+          if (result.success) {
+            rowImages[row].audio = result.filename;
+            setAudioPreview(row, result.filename);
+            audioNote(row, '');
+          } else {
+            audioNote(row, result.message || 'Upload failed');
+          }
+        } catch (err) {
+          audioNote(row, 'Upload failed');
+        }
+        input.value = '';
+      });
+    });
+
+    document.querySelectorAll('.qAudioRemoveBtn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = parseInt(btn.dataset.row);
+        rowImages[row].audio = null;
+        setAudioPreview(row, null);
+      });
+    });
+
     document.querySelectorAll('.qRemoveBtn').forEach(btn => {
       btn.addEventListener('click', () => {
         const row = parseInt(btn.dataset.row);
@@ -902,12 +1001,15 @@
       document.querySelectorAll('.showTextInput').forEach(i => i.checked = true);
       document.querySelectorAll('.textPosInput').forEach(i => i.value = 'bottom');
       rowImages = [
-        { q: null, a: null }, { q: null, a: null }, { q: null, a: null },
-        { q: null, a: null }, { q: null, a: null }
+        { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
+        { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
+        { q: null, a: null, audio: null }
       ];
       for (let i = 0; i < 5; i++) {
         setPreview('q', i, null);
         setPreview('a', i, null);
+        setAudioPreview(i, null);
+        audioNote(i, '');
       }
       editingId = null;
       document.getElementById('formHeading').textContent = 'Add Round to Library';
@@ -934,6 +1036,7 @@
             answer: a,
             questionImage: rowImages[i].q || null,
             answerImage: rowImages[i].a || null,
+            questionAudio: rowImages[i].audio || null,
             showText: showTextInputs[i] ? showTextInputs[i].checked : true,
             textPosition: textPosInputs[i] ? textPosInputs[i].value : 'bottom'
           });
@@ -977,8 +1080,9 @@
       const aInputs = document.querySelectorAll('.aInput');
 
       rowImages = [
-        { q: null, a: null }, { q: null, a: null }, { q: null, a: null },
-        { q: null, a: null }, { q: null, a: null }
+        { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
+        { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
+        { q: null, a: null, audio: null }
       ];
 
       const showTextInputs = document.querySelectorAll('.showTextInput');
@@ -989,6 +1093,9 @@
         input.value = q ? q.question : '';
         if (showTextInputs[i]) showTextInputs[i].checked = !q || q.showText !== false;
         if (textPosInputs[i]) textPosInputs[i].value = (q && q.textPosition) || 'bottom';
+        rowImages[i].audio = (q && q.questionAudio) || null;
+        setAudioPreview(i, rowImages[i].audio);
+        audioNote(i, '');
         if (q && q.questionImage) {
           rowImages[i].q = q.questionImage;
           setPreview('q', i, q.questionImage);
@@ -1051,7 +1158,8 @@
           const p = document.createElement('p');
           const qImg = q.questionImage ? ' [has question image]' : '';
           const aImg = q.answerImage ? ' [has answer image]' : '';
-          p.textContent = `${qi + 1}. ${q.question}${qImg} — (${q.answer}${aImg})`;
+          const qAud = q.questionAudio ? ' [has audio]' : '';
+          p.textContent = `${qi + 1}. ${q.question}${qImg}${qAud} — (${q.answer}${aImg})`;
           questionsDiv.appendChild(p);
         });
 
@@ -1190,6 +1298,13 @@
       const state = await response.json();
       const players = state.players;
 
+      QuizAudio.sync(state);
+      const clipHere = state.gameStarted && !state.showRoundIntro
+        && state.currentQuestion && state.currentQuestion.questionAudio;
+      document.getElementById('audioControls').style.display = clipHere ? 'flex' : 'none';
+      document.getElementById('audioPlayButton').innerHTML =
+        state.audio && state.audio.playing ? '&#8635; PLAY FROM START' : '&#9654; PLAY CLIP';
+
       document.getElementById('startButton').style.display = state.gameStarted ? 'none' : 'block';
       document.getElementById('startRoundButton').style.display =
         (state.gameStarted && state.showRoundIntro) ? 'block' : 'none';
@@ -1282,6 +1397,16 @@
         area.appendChild(row);
       }
     }
+
+    document.getElementById('audioPlayButton').addEventListener('click', async () => {
+      await fetch('/api/audio/play', { method: 'POST' });
+      refreshStatus();
+    });
+
+    document.getElementById('audioStopButton').addEventListener('click', async () => {
+      await fetch('/api/audio/stop', { method: 'POST' });
+      refreshStatus();
+    });
 
     document.getElementById('revealButton').addEventListener('click', async () => {
       await fetch('/api/reveal', { method: 'POST' });

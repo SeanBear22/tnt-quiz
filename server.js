@@ -54,6 +54,18 @@ const upload = multer({
   }
 });
 
+// Audio questions. Separate from the image uploader: different types, and a
+// larger limit since a few seconds of music is bigger than a picture.
+const ALLOWED_AUDIO_TYPES = /^audio\/(mpeg|mp3|wav|x-wav|wave|vnd\.wave|ogg|webm|mp4|x-m4a|m4a|aac|x-aac|flac|x-flac)$/;
+
+const audioUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    cb(null, ALLOWED_AUDIO_TYPES.test(file.mimetype));
+  }
+});
+
 function emptyPlayer() {
   return {
     name: null,
@@ -80,6 +92,19 @@ let gameStarted = false;
 let currentRoundIndex = 0;
 let currentQuestionIndex = 0;
 let hostName = null;
+
+// Audio clip playback, driven by the host. The token changes on every play or
+// stop so each page can tell a new command from one it has already acted on;
+// startedAt lets a page that loads mid-clip join at the right point.
+let audioPlaying = false;
+let audioToken = 0;
+let audioStartedAt = null;
+
+function stopAudio() {
+  audioPlaying = false;
+  audioToken++;
+  audioStartedAt = null;
+}
 let hostCameraOff = false;
 let hostCardImage = null;
 let showRoundIntro = false;
@@ -150,6 +175,7 @@ function projectQuestion(question, isHost) {
     // saved rounds, which have neither field, behaving as before.
     showText: question.showText !== false,
     textPosition: question.textPosition || 'bottom',
+    questionAudio: question.questionAudio || null,
     answer: showAnswer ? question.answer : null,
     answerImage: showAnswer ? (question.answerImage || null) : null
   };
@@ -192,7 +218,15 @@ function buildState(role, ownSlot) {
     hostName,
     hostCameraOff,
     hostCardImage,
-    showRoundIntro
+    showRoundIntro,
+    audio: {
+      playing: audioPlaying,
+      token: audioToken,
+      startedAt: audioStartedAt
+    },
+    // Lets a page work out how far into a clip it should be, without
+    // depending on its own clock agreeing with the server's.
+    serverNow: Date.now()
   };
 
   // Only the host receives the loaded rounds, which contain every answer.
@@ -272,6 +306,36 @@ app.post('/api/upload', requireHost, (req, res) => {
   });
 });
 
+app.post('/api/upload/audio', requireHost, (req, res) => {
+  audioUpload.single('audio')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Audio is too large (20MB maximum)'
+        : 'Upload failed';
+      return res.status(400).json({ success: false, message });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only MP3, WAV, OGG, M4A, AAC, WebM and FLAC audio is accepted'
+      });
+    }
+    res.json({ success: true, filename: req.file.filename });
+  });
+});
+
+app.post('/api/audio/play', requireHost, (req, res) => {
+  audioPlaying = true;
+  audioToken++;
+  audioStartedAt = Date.now();
+  res.json({ success: true });
+});
+
+app.post('/api/audio/stop', requireHost, (req, res) => {
+  stopAudio();
+  res.json({ success: true });
+});
+
 app.post('/api/claim', (req, res) => {
   const { slot, name } = req.body;
   if (players[slot] && players[slot].name === null) {
@@ -343,6 +407,7 @@ app.post('/api/game/reset', requireHost, (req, res) => {
   currentRoundIndex = 0;
   currentQuestionIndex = 0;
   showRoundIntro = false;
+  stopAudio();
   res.json({ success: true });
 });
 
@@ -390,6 +455,7 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
     currentQuestionIndex = 0;
     showRoundIntro = false;
     revealed = false;
+    stopAudio();
   }
   res.json({ success: true, roundCount: rounds.length });
 });
@@ -400,12 +466,14 @@ app.post('/api/game/start', requireHost, (req, res) => {
     currentRoundIndex = 0;
     currentQuestionIndex = 0;
     showRoundIntro = true;
+    stopAudio();
   }
   res.json({ success: true, started: gameStarted });
 });
 
 app.post('/api/round/begin', requireHost, (req, res) => {
   showRoundIntro = false;
+  stopAudio();
   res.json({ success: true });
 });
 
@@ -415,6 +483,7 @@ app.post('/api/next', requireHost, (req, res) => {
     players[slot].correct = null;
   }
   revealed = false;
+  stopAudio();
 
   const currentRound = rounds[currentRoundIndex];
   let roundChanged = false;

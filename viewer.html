@@ -220,6 +220,13 @@
       overflow: hidden;
     }
 
+    .qaImageWrap canvas.waveform {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0d1420;
+    }
+
     .qaImageWrap img {
       width: 100%;
       height: 100%;
@@ -363,6 +370,7 @@
 
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
+  <script src="quiz-audio.js"></script>
   <script>
     function buildWinnerHtml(players) {
       const joined = Object.values(players).filter(p => p.name);
@@ -392,6 +400,21 @@
       `;
     }
 
+    // The question area is only rewritten when its content actually changes.
+    // Rewriting it every second would restart the waveform animation and, on
+    // pages that play the clip, cut it off.
+    let lastQuestionHtml = null;
+    function setQuestionHtml(box, html) {
+      if (html === lastQuestionHtml) return;
+      lastQuestionHtml = html;
+      box.innerHTML = html;
+      QuizAudio.drawAll(box);
+    }
+
+    // /viewer?noaudio is for people watching the layout; keep the clip silent
+    // there as well as the camera audio. OBS uses the plain URL and needs it.
+    if (location.search.indexOf('noaudio') !== -1) QuizAudio.setMuted(true);
+
     async function refreshViewer() {
       const response = await fetch('/api/state/viewer');
       const state = await response.json();
@@ -407,19 +430,28 @@
           : 'none';
       }
 
+      QuizAudio.sync(state);
+
       const questionBox = document.getElementById('questionText');
       const frameOverlayHtml = '<img class="qFrameOverlay" src="Q-frame.png" alt="">';
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
-        questionBox.innerHTML =
+        setQuestionHtml(questionBox,
           `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}</div>` +
-          frameOverlayHtml;
+          frameOverlayHtml);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         const hasImage = q.questionImage || (state.revealed && q.answerImage);
+        const hasMedia = hasImage || q.questionAudio;
 
-        if (hasImage) {
+        if (hasMedia) {
           const imgSrc = state.revealed && q.answerImage ? q.answerImage : q.questionImage;
+
+          // An image always wins. An audio question with no image shows the
+          // clip's waveform in the same space instead.
+          const mediaHtml = imgSrc
+            ? `<img src="/uploads/${imgSrc}">`
+            : `<canvas class="waveform" data-src="/uploads/${q.questionAudio}"></canvas>`;
 
           // The toggle governs the question text only. A revealed answer is
           // always shown, since otherwise it would be unreadable unless the
@@ -439,22 +471,22 @@
             ? `<div class="qaTextOverlay${posClass}">${textHtml}</div>`
             : '';
 
-          questionBox.innerHTML = `
-            <div class="qaImageWrap"><img src="/uploads/${imgSrc}"></div>
+          setQuestionHtml(questionBox, `
+            <div class="qaImageWrap">${mediaHtml}</div>
             ${overlayHtml}
             ${frameOverlayHtml}
-          `;
+          `);
         } else {
           let html = `Q${state.currentQuestionIndex + 1}: ${q.question}`;
           if (state.revealed) {
             html += `<div class="answerLine">${q.answer}</div>`;
           }
-          questionBox.innerHTML = `<div class="qTextOnly">${html}</div>` + frameOverlayHtml;
+          setQuestionHtml(questionBox, `<div class="qTextOnly">${html}</div>` + frameOverlayHtml);
         }
       } else if (state.gameStarted) {
-        questionBox.innerHTML = buildWinnerHtml(players) + frameOverlayHtml;
+        setQuestionHtml(questionBox, buildWinnerHtml(players) + frameOverlayHtml);
       } else {
-        questionBox.innerHTML = `<div class="qTextOnly">Get ready...</div>` + frameOverlayHtml;
+        setQuestionHtml(questionBox, `<div class="qTextOnly">Get ready...</div>` + frameOverlayHtml);
       }
 
       document.querySelectorAll('.playerSlot').forEach(el => {

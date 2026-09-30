@@ -82,6 +82,27 @@
       line-height: 1.25;
     }
 
+    #questionDisplay canvas.waveform {
+      display: block;
+      width: 100%;
+      max-width: 420px;
+      height: 90px;
+      margin: 0 auto 12px auto;
+    }
+
+    #audioUnblock {
+      display: none;
+      margin: 10px auto 0 auto;
+      padding: 10px 18px;
+      font-size: 1em;
+      font-weight: bold;
+      cursor: pointer;
+      border: 0;
+      border-radius: 6px;
+      background: #ffb400;
+      color: #1a1a2e;
+    }
+
     #questionDisplay img.qaImage {
       max-width: 100%;
       max-height: 400px;
@@ -295,6 +316,7 @@
   </div>
 
   <div id="questionDisplay">Waiting for a question...</div>
+  <button id="audioUnblock" type="button">&#128266; Tap to hear the clip</button>
 
   <div id="answerArea" style="display:none;">
     <p id="scoreText">Score: 0</p>
@@ -326,6 +348,7 @@
 
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
+  <script src="quiz-audio.js"></script>
   <script>
     // Token issued by the server when this browser claims a slot. It proves
     // which player is submitting, so a slot cannot be answered for by anyone
@@ -365,6 +388,25 @@
       `;
     }
 
+    // The question area is only rewritten when its content actually changes,
+    // so the waveform is not redrawn from scratch every second.
+    let lastQuestionHtml = null;
+    function setQuestionHtml(box, html) {
+      if (html === lastQuestionHtml) return;
+      lastQuestionHtml = html;
+      box.innerHTML = html;
+      QuizAudio.drawAll(box);
+    }
+
+    // Browsers refuse to start sound on a page nobody has clicked since it
+    // loaded, which happens if a player reloads mid-game. Offer a button.
+    const unblockBtn = document.getElementById('audioUnblock');
+    QuizAudio.onBlocked = () => { unblockBtn.style.display = 'block'; };
+    unblockBtn.addEventListener('click', () => {
+      unblockBtn.style.display = 'none';
+      QuizAudio.resume();
+    });
+
     async function refreshButtons() {
       const response = await fetch('/api/state', {
         headers: myToken ? { 'X-Player-Token': myToken } : {}
@@ -379,15 +421,19 @@
         localStorage.removeItem('tntQuizToken');
       }
 
+      QuizAudio.sync(state);
+
       const questionBox = document.getElementById('questionDisplay');
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
-        questionBox.innerHTML = `ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}`;
+        setQuestionHtml(questionBox, `ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}`);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         let html = '';
         if (q.questionImage) {
           html += `<img class="qaImage" src="/uploads/${q.questionImage}">`;
+        } else if (q.questionAudio) {
+          html += `<canvas class="waveform" data-src="/uploads/${q.questionAudio}"></canvas>`;
         }
         html += `Q${state.currentQuestionIndex + 1}: ${q.question}`;
         if (state.revealed) {
@@ -397,11 +443,11 @@
           }
           html += `${q.answer}</div>`;
         }
-        questionBox.innerHTML = html;
+        setQuestionHtml(questionBox, html);
       } else if (state.gameStarted) {
-        questionBox.innerHTML = buildWinnerHtml(players);
+        setQuestionHtml(questionBox, buildWinnerHtml(players));
       } else {
-        questionBox.textContent = 'Waiting for a question...';
+        setQuestionHtml(questionBox, 'Waiting for a question...');
       }
 
       document.querySelectorAll('.slotBtn').forEach(btn => {
