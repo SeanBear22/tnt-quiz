@@ -58,9 +58,11 @@ const VDO = {
   mirror: false,
 
   // Background blur strength when someone ticks the blur box, passed as
-  // &effectvalue alongside &effects=3. Tested: 8 gives a heavy, Teams-style
-  // blur. Decimals work; VDO.Ninja advises keeping it under 10.
-  blurStrength: 8
+  // &effectvalue alongside &effects=3. The value is in pixels on the full
+  // camera image, so it looks weaker the smaller the picture is shown. 8
+  // looked heavy full screen but light in the viewer frames, so the default
+  // is higher. VDO.Ninja's own advice of under 10 assumes a full-size feed.
+  blurStrength: 20
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
@@ -94,7 +96,7 @@ function vdoPushUrl(seat, options) {
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
   const blur = options && options.blur
-    ? ['effects=3', 'effectvalue=' + (VDO.blurStrength || 8)]
+    ? ['effects=3', 'effectvalue=' + (VDO.blurStrength || 20)]
     : [];
   return 'https://vdo.ninja/?' + blur.concat([
     'room=' + encodeURIComponent(VDO.room),
