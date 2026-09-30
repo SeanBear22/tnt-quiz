@@ -340,9 +340,78 @@
       border: 0;
       display: block;
     }
+
+    #camControls {
+      position: fixed;
+      right: 12px;
+      bottom: 230px;
+      width: 280px;
+      z-index: 50;
+      background: rgba(12, 18, 28, 0.94);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: sans-serif;
+      font-size: 0.8em;
+      color: #cbd5e0;
+      text-align: left;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    #camControls .row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    #camControls button {
+      flex: 1;
+      padding: 6px 4px;
+      font-size: 1em;
+      cursor: pointer;
+      border: 0;
+      border-radius: 4px;
+      background: #2d3748;
+      color: #e2e8f0;
+      margin-top: 0;
+    }
+
+    #camControls button.off {
+      background: #9b2c2c;
+      color: #fff;
+    }
+
+    #camControls select {
+      width: 100%;
+      margin-bottom: 6px;
+      font-size: 0.95em;
+      padding: 4px;
+      box-sizing: border-box;
+    }
+
+    #camControls label {
+      display: block;
+      margin-bottom: 2px;
+      color: #718096;
+    }
+
+    #camControls .note {
+      color: #718096;
+      min-height: 1em;
+    }
   </style>
 </head>
 <body>
+  <div id="camControls">
+    <div class="row">
+      <button id="micBtn" type="button">Mic on</button>
+      <button id="camBtn" type="button">Camera on</button>
+    </div>
+    <label for="micSelect">Microphone</label>
+    <select id="micSelect"></select>
+    <label for="vidSelect">Camera</label>
+    <select id="vidSelect"></select>
+    <div class="note" id="camNote"></div>
+  </div>
   <div id="camSelf"></div>
   <h1>TNT NERDS — Host Control Panel</h1>
 
@@ -440,6 +509,123 @@
       getSecret();
     })();
 
+    // --- Feed controls -----------------------------------------------------
+    // Same controls the players get. The mic and camera are genuinely stopped
+    // via the VDO.Ninja iframe API rather than merely hidden. The host has no
+    // player slot, so nothing is reported to the server: these are local.
+
+    let camFrame = null;
+    let micOn = true;
+    let cameraOn = true;
+    let devicesNamed = false;
+
+    function toFrame(message) {
+      if (camFrame && camFrame.contentWindow) {
+        camFrame.contentWindow.postMessage(message, '*');
+      }
+    }
+
+    function note(text) {
+      document.getElementById('camNote').textContent = text || '';
+    }
+
+    document.getElementById('micBtn').addEventListener('click', () => {
+      micOn = !micOn;
+      toFrame({ mic: micOn });
+      const btn = document.getElementById('micBtn');
+      btn.textContent = micOn ? 'Mic on' : 'Mic MUTED';
+      btn.classList.toggle('off', !micOn);
+    });
+
+    document.getElementById('camBtn').addEventListener('click', () => {
+      cameraOn = !cameraOn;
+      toFrame({ action: 'camera', value: cameraOn });
+      const btn = document.getElementById('camBtn');
+      btn.textContent = cameraOn ? 'Camera on' : 'Camera OFF';
+      btn.classList.toggle('off', !cameraOn);
+    });
+
+    // --- Device selection --------------------------------------------------
+    // Device IDs are scoped to the origin that listed them, so the list has to
+    // come from inside the VDO.Ninja frame and the IDs go straight back to it.
+    // Labels are stored too: IDs change when a USB device is replugged.
+
+    function savedDevice(kind) {
+      try {
+        return JSON.parse(localStorage.getItem('tntQuizHostDevice_' + kind) || 'null');
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function saveDevice(kind, id, label) {
+      localStorage.setItem('tntQuizHostDevice_' + kind, JSON.stringify({ id, label }));
+    }
+
+    function applyDevice(kind, id, label) {
+      if (kind === 'audio') toFrame({ changeAudioDevice: id });
+      else toFrame({ changeVideoDevice: id });
+      saveDevice(kind, id, label);
+    }
+
+    function fillSelect(select, devices, kind) {
+      select.innerHTML = '';
+      devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || 'Unnamed device';
+        select.appendChild(option);
+      });
+
+      const saved = savedDevice(kind);
+      if (!saved) return;
+
+      let match = devices.find(d => d.deviceId === saved.id);
+      if (!match && saved.label) {
+        match = devices.find(d => d.label === saved.label);
+      }
+      if (!match) return;
+      select.value = match.deviceId;
+
+      // Only switch device once the stream is actually publishing. Applying it
+      // mid-startup interrupts autostart and leaves the join screen up.
+      if (devicesNamed) applyDevice(kind, match.deviceId, match.label);
+    }
+
+    window.addEventListener('message', event => {
+      if (!camFrame || event.source !== camFrame.contentWindow) return;
+      const data = event.data;
+      if (!data || !Array.isArray(data.deviceList)) return;
+
+      const mics = data.deviceList.filter(d => d.kind === 'audioinput');
+      const cams = data.deviceList.filter(d => d.kind === 'videoinput');
+      fillSelect(document.getElementById('micSelect'), mics, 'audio');
+      fillSelect(document.getElementById('vidSelect'), cams, 'video');
+
+      devicesNamed = mics.concat(cams).some(d => d.label);
+      note(devicesNamed
+        ? mics.length + ' mic(s), ' + cams.length + ' camera(s) found'
+        : 'Waiting for camera permission...');
+    });
+
+    ['micSelect', 'vidSelect'].forEach(id => {
+      document.getElementById(id).addEventListener('mousedown', () => {
+        toFrame({ getDeviceList: true, cib: 'setup' });
+      });
+    });
+
+    document.getElementById('micSelect').addEventListener('change', event => {
+      const option = event.target.selectedOptions[0];
+      applyDevice('audio', event.target.value, option ? option.textContent : '');
+      note('Microphone changed');
+    });
+
+    document.getElementById('vidSelect').addEventListener('change', event => {
+      const option = event.target.selectedOptions[0];
+      applyDevice('video', event.target.value, option ? option.textContent : '');
+      note('Camera changed');
+    });
+
     // Host camera starts with the page.
     (function () {
       const url = vdoPushUrl('host');
@@ -449,6 +635,18 @@
       frame.allow = 'camera; microphone; autoplay; fullscreen; display-capture';
       frame.scrolling = 'no';
       document.getElementById('camSelf').appendChild(frame);
+      camFrame = frame;
+
+      // Device labels stay blank until the browser has granted camera
+      // permission, which happens a little after the frame loads. Ask a few
+      // times rather than once, and stop as soon as real labels arrive.
+      frame.addEventListener('load', () => {
+        [1500, 4000, 8000, 15000].forEach(delay => {
+          setTimeout(() => {
+            if (!devicesNamed) toFrame({ getDeviceList: true, cib: 'setup' });
+          }, delay);
+        });
+      });
     })();
     let bankCache = [];
     let editingId = null;
