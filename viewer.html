@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>TNT Nerds - Viewer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
 
@@ -17,6 +17,29 @@
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+    }
+
+    /* The quote box sits over the white paper strip in the background image.
+       Its position is set by script from the image's own coordinates, so it
+       stays on the paper at any window size. */
+    #quoteBox {
+      position: fixed;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+      pointer-events: none;
+      font-family: 'Bangers', Impact, sans-serif;
+      letter-spacing: 0.03em;
+      line-height: 1.05;
+      color: #1b1b1b;
+    }
+
+    #quoteBox span {
+      display: block;
+      overflow-wrap: break-word;
     }
 
     .layout {
@@ -374,6 +397,7 @@
   </style>
 </head>
 <body>
+  <div id="quoteBox"><span id="quoteText"></span></div>
   <div class="layout">
     <div id="hostBox">
       <div class="frameWrap">
@@ -519,6 +543,7 @@
       const players = state.players;
 
       document.getElementById('hostLabel').textContent = state.hostName ? state.hostName.toUpperCase() : 'HOST';
+      showQuote(state.quote);
 
       const hostCard = document.querySelector('#hostBox .cardOverlay');
       if (hostCard) {
@@ -671,6 +696,62 @@
     }
 
     prepareCutouts();
+
+    // --- Quote box ------------------------------------------------------
+    // The background is drawn with background-size: cover, centred, so the
+    // image is scaled by whichever of width or height needs the larger factor
+    // and the overflow is cropped equally from both sides. The same sums place
+    // the box on the paper. The rectangle is inside the paper's torn edges and
+    // clear of both yellow quote marks, measured on the 1672x941 image.
+    const BG_SIZE = { w: 1672, h: 941 };
+    const QUOTE_AREA = { left: 1208, top: 100, right: 1460, bottom: 228 };
+    let shownQuote = null;
+
+    function placeQuoteBox() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const scale = Math.max(vw / BG_SIZE.w, vh / BG_SIZE.h);
+      const offsetX = (vw - BG_SIZE.w * scale) / 2;
+      const offsetY = (vh - BG_SIZE.h * scale) / 2;
+      const box = document.getElementById('quoteBox');
+      box.style.left = (offsetX + QUOTE_AREA.left * scale) + 'px';
+      box.style.top = (offsetY + QUOTE_AREA.top * scale) + 'px';
+      box.style.width = ((QUOTE_AREA.right - QUOTE_AREA.left) * scale) + 'px';
+      box.style.height = ((QUOTE_AREA.bottom - QUOTE_AREA.top) * scale) + 'px';
+      fitQuote();
+    }
+
+    // Largest font size at which the whole quote fits inside the box, found
+    // by halving the range rather than stepping down a pixel at a time.
+    function fitQuote() {
+      const box = document.getElementById('quoteBox');
+      const text = document.getElementById('quoteText');
+      if (!text.textContent) return;
+      let low = 6;
+      let high = Math.max(low, box.clientHeight * 0.75);
+      while (high - low > 0.5) {
+        const mid = (low + high) / 2;
+        text.style.fontSize = mid + 'px';
+        const fits = text.scrollWidth <= box.clientWidth && text.scrollHeight <= box.clientHeight;
+        if (fits) low = mid; else high = mid;
+      }
+      text.style.fontSize = low + 'px';
+    }
+
+    function showQuote(quote) {
+      const value = quote || '';
+      if (value === shownQuote) return;
+      shownQuote = value;
+      document.getElementById('quoteText').textContent = value;
+      fitQuote();
+    }
+
+    window.addEventListener('resize', placeQuoteBox);
+    // Measure with Bangers itself, not the fallback font, once it has loaded.
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load('40px Bangers').then(() => { shownQuote = null; placeQuoteBox(); });
+    }
+    placeQuoteBox();
 
     setInterval(refreshViewer, 1000);
     refreshViewer();

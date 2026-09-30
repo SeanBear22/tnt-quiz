@@ -60,6 +60,63 @@ if (!joinCode) {
   console.warn('No join code set. Anyone can take a seat until the host sets one.');
 }
 
+// --- Quote box ------------------------------------------------------------
+// The white paper strip at the top right of the viewer shows a line from
+// quotes.txt, which is edited on GitHub: one entry per line, blank lines and
+// lines starting with # ignored. The file is read afresh each time a quote is
+// picked, so an edit takes effect after a git pull, with no restart.
+//
+// Each REVEAL picks a new line at random, but nothing repeats until every
+// other line has had a turn. Which lines have been used is saved alongside
+// the join code, so a restart doesn't start the cycle over.
+const QUOTES_FILE = path.join(__dirname, 'quotes.txt');
+
+function readQuotes() {
+  try {
+    return fs.readFileSync(QUOTES_FILE, 'utf8')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'));
+  } catch (err) {
+    return [];
+  }
+}
+
+let currentQuote = typeof savedSettings.quoteCurrent === 'string' ? savedSettings.quoteCurrent : '';
+
+function pickQuote() {
+  const all = Array.from(new Set(readQuotes()));
+  if (all.length === 0) {
+    currentQuote = '';
+    return;
+  }
+
+  const settings = loadSettings();
+  // Forget used lines that have since been removed or reworded in the file.
+  let used = (Array.isArray(settings.quoteUsed) ? settings.quoteUsed : [])
+    .filter(q => all.includes(q));
+
+  let remaining = all.filter(q => !used.includes(q));
+  if (remaining.length === 0) {
+    // Everything has had a turn: start a new cycle, but never open it with
+    // the line that is already on screen.
+    used = [];
+    remaining = all.length > 1 ? all.filter(q => q !== currentQuote) : all;
+  }
+
+  currentQuote = remaining[crypto.randomInt(remaining.length)];
+  used.push(currentQuote);
+
+  try {
+    saveSettings(Object.assign(settings, { quoteUsed: used, quoteCurrent: currentQuote }));
+  } catch (err) {
+    console.warn('Could not save quote rotation: ' + err.message);
+  }
+}
+
+// Start with something on screen, and replace a line that no longer exists.
+if (!currentQuote || !readQuotes().includes(currentQuote)) pickQuote();
+
 // Camera stream IDs are random and issued by the server, never fixed. The room
 // password has to be readable by every browser that joins, so a fixed, guessable
 // ID would let a stranger publish into a seat before its player arrived.
@@ -295,6 +352,7 @@ function buildState(role, ownSlot) {
     // The host's feed, once the host page says its camera is publishing.
     hostStreamId: hostCamLive ? hostStreamId : null,
     joinCodeRequired: !!joinCode,
+    quote: currentQuote,
     showRoundIntro,
     audio: {
       playing: audioPlaying,
@@ -468,6 +526,8 @@ app.post('/api/answers/show', requireHost, (req, res) => {
 });
 
 app.post('/api/reveal', requireHost, (req, res) => {
+  // A second press on the same question shouldn't skip a quote.
+  if (!revealed) pickQuote();
   revealed = true;
   answersShown = false;
   res.json({ success: true });
