@@ -146,6 +146,10 @@ function projectQuestion(question, isHost) {
   return {
     question: question.question,
     questionImage: question.questionImage || null,
+    // How the question text is laid over an image. Defaults keep older
+    // saved rounds, which have neither field, behaving as before.
+    showText: question.showText !== false,
+    textPosition: question.textPosition || 'bottom',
     answer: showAnswer ? question.answer : null,
     answerImage: showAnswer ? (question.answerImage || null) : null
   };

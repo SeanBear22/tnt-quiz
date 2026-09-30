@@ -321,6 +321,37 @@
     }
   </style>
   <style>
+    .textOpts {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 0.8em;
+      color: #9fb3c8;
+    }
+
+    .textOpts .showTextLabel {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .textOpts input[type=checkbox] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .textOpts select {
+      font-size: 1em;
+      padding: 2px 4px;
+    }
+
+    .textOpts.disabled {
+      opacity: 0.45;
+    }
+
     #camPanel {
       position: fixed;
       top: 12px;
@@ -731,6 +762,17 @@
             <button type="button" class="removeImgBtn qRemoveBtn" data-row="${i}">Remove</button>
           </div>
           <input type="file" class="qImgFile" data-row="${i}" accept="image/*" style="display:none;">
+          <div class="textOpts">
+            <label class="showTextLabel">
+              <input type="checkbox" class="showTextInput" data-row="${i}" checked>
+              Show text over image
+            </label>
+            <select class="textPosInput" data-row="${i}">
+              <option value="top">Top</option>
+              <option value="middle">Middle</option>
+              <option value="bottom" selected>Bottom</option>
+            </select>
+          </div>
         </div>
         <div class="qaCell">
           <input type="text" class="aInput" autocomplete="off" placeholder="Answer ${i + 1}">
@@ -821,6 +863,8 @@
       document.getElementById('roundTitle').value = '';
       document.querySelectorAll('.qInput').forEach(i => i.value = '');
       document.querySelectorAll('.aInput').forEach(i => i.value = '');
+      document.querySelectorAll('.showTextInput').forEach(i => i.checked = true);
+      document.querySelectorAll('.textPosInput').forEach(i => i.value = 'bottom');
       rowImages = [
         { q: null, a: null }, { q: null, a: null }, { q: null, a: null },
         { q: null, a: null }, { q: null, a: null }
@@ -841,6 +885,8 @@
       const title = document.getElementById('roundTitle').value;
       const qInputs = document.querySelectorAll('.qInput');
       const aInputs = document.querySelectorAll('.aInput');
+      const showTextInputs = document.querySelectorAll('.showTextInput');
+      const textPosInputs = document.querySelectorAll('.textPosInput');
 
       const questions = [];
       for (let i = 0; i < qInputs.length; i++) {
@@ -851,7 +897,9 @@
             question: q,
             answer: a,
             questionImage: rowImages[i].q || null,
-            answerImage: rowImages[i].a || null
+            answerImage: rowImages[i].a || null,
+            showText: showTextInputs[i] ? showTextInputs[i].checked : true,
+            textPosition: textPosInputs[i] ? textPosInputs[i].value : 'bottom'
           });
         }
       }
@@ -897,9 +945,14 @@
         { q: null, a: null }, { q: null, a: null }
       ];
 
+      const showTextInputs = document.querySelectorAll('.showTextInput');
+      const textPosInputs = document.querySelectorAll('.textPosInput');
+
       qInputs.forEach((input, i) => {
         const q = round.questions[i];
         input.value = q ? q.question : '';
+        if (showTextInputs[i]) showTextInputs[i].checked = !q || q.showText !== false;
+        if (textPosInputs[i]) textPosInputs[i].value = (q && q.textPosition) || 'bottom';
         if (q && q.questionImage) {
           rowImages[i].q = q.questionImage;
           setPreview('q', i, q.questionImage);
