@@ -87,6 +87,10 @@ function vdoPushUrl(seat) {
     // START button. Camera permission is not requested until that is clicked,
     // and device labels stay blank until permission is granted.
     'autostart',
+    // Guests only receive the director's video, so each person's preview shows
+    // themselves rather than a stack of everyone in the room. Audio between
+    // guests is unaffected.
+    'broadcast',
     'quality=1',
     'videobitrate=' + VDO.videoBitrate,
     'cleanoutput'

@@ -383,6 +383,14 @@
 
       document.getElementById('hostLabel').textContent = state.hostName ? state.hostName.toUpperCase() : 'HOST';
 
+      const hostCard = document.querySelector('#hostBox .cardOverlay');
+      if (hostCard) {
+        hostCard.classList.toggle('visible', !!state.hostCameraOff);
+        hostCard.style.backgroundImage = state.hostCardImage
+          ? `url('/uploads/${state.hostCardImage}')`
+          : 'none';
+      }
+
       const questionBox = document.getElementById('questionText');
       const frameOverlayHtml = '<img class="qFrameOverlay" src="Q-frame.png" alt="">';
 
@@ -479,6 +487,10 @@
           frame.allow = 'autoplay';
           frame.scrolling = 'no';
           hostOverlay.appendChild(frame);
+
+          const card = document.createElement('div');
+          card.className = 'cardOverlay';
+          hostOverlay.parentElement.appendChild(card);
         }
       }
     }

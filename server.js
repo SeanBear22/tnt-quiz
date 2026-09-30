@@ -80,6 +80,8 @@ let gameStarted = false;
 let currentRoundIndex = 0;
 let currentQuestionIndex = 0;
 let hostName = null;
+let hostCameraOff = false;
+let hostCardImage = null;
 let showRoundIntro = false;
 let bankedRounds = [];
 
@@ -184,6 +186,8 @@ function buildState(role, ownSlot) {
     currentQuestionIndex,
     questionsInRound: currentRound ? currentRound.questions.length : 0,
     hostName,
+    hostCameraOff,
+    hostCardImage,
     showRoundIntro
   };
 
@@ -440,6 +444,32 @@ app.get('/api/state', (req, res) => {
   }
   const slot = slotForToken(req);
   res.json(buildState('player', slot));
+});
+
+// The host's own feed state and card. Host-authenticated rather than
+// player-authenticated, since the host holds no player slot.
+app.post('/api/host/status', requireHost, (req, res) => {
+  if (typeof req.body.cameraOff === 'boolean') hostCameraOff = req.body.cameraOff;
+  res.json({ success: true, cameraOff: hostCameraOff });
+});
+
+app.post('/api/host/card', requireHost, (req, res) => {
+  upload.single('card')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Image is too large (5MB maximum)'
+        : 'Upload failed';
+      return res.status(400).json({ success: false, message });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only PNG, JPEG, GIF and WebP images are accepted'
+      });
+    }
+    hostCardImage = req.file.filename;
+    res.json({ success: true, filename: req.file.filename });
+  });
 });
 
 // A player reporting their own feed state, so the viewer page can show a

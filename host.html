@@ -321,13 +321,18 @@
     }
   </style>
   <style>
-    #camSelf {
+    #camPanel {
       position: fixed;
+      top: 12px;
       right: 12px;
-      bottom: 12px;
       width: 280px;
-      height: 210px;
       z-index: 50;
+    }
+
+    #camSelf {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      margin-top: 8px;
       border-radius: 6px;
       overflow: hidden;
       background: #131c2b;
@@ -342,11 +347,6 @@
     }
 
     #camControls {
-      position: fixed;
-      right: 12px;
-      bottom: 230px;
-      width: 280px;
-      z-index: 50;
       background: rgba(12, 18, 28, 0.94);
       border-radius: 6px;
       padding: 10px;
@@ -380,7 +380,8 @@
       color: #fff;
     }
 
-    #camControls select {
+    #camControls select,
+    #camControls input[type=file] {
       width: 100%;
       margin-bottom: 6px;
       font-size: 0.95em;
@@ -401,18 +402,22 @@
   </style>
 </head>
 <body>
-  <div id="camControls">
-    <div class="row">
-      <button id="micBtn" type="button">Mic on</button>
-      <button id="camBtn" type="button">Camera on</button>
+  <div id="camPanel">
+    <div id="camControls">
+      <div class="row">
+        <button id="micBtn" type="button">Mic on</button>
+        <button id="camBtn" type="button">Camera on</button>
+      </div>
+      <label for="micSelect">Microphone</label>
+      <select id="micSelect"></select>
+      <label for="vidSelect">Camera</label>
+      <select id="vidSelect"></select>
+      <label for="cardInput">Card shown when camera is off</label>
+      <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+      <div class="note" id="camNote"></div>
     </div>
-    <label for="micSelect">Microphone</label>
-    <select id="micSelect"></select>
-    <label for="vidSelect">Camera</label>
-    <select id="vidSelect"></select>
-    <div class="note" id="camNote"></div>
+    <div id="camSelf"></div>
   </div>
-  <div id="camSelf"></div>
   <h1>TNT NERDS — Host Control Panel</h1>
 
   <div class="topBar">
@@ -537,12 +542,40 @@
       btn.classList.toggle('off', !micOn);
     });
 
+    async function reportStatus() {
+      try {
+        await fetch('/api/host/status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cameraOff: !cameraOn })
+        });
+      } catch (err) {
+        note('Could not reach the server');
+      }
+    }
+
     document.getElementById('camBtn').addEventListener('click', () => {
       cameraOn = !cameraOn;
       toFrame({ action: 'camera', value: cameraOn });
       const btn = document.getElementById('camBtn');
       btn.textContent = cameraOn ? 'Camera on' : 'Camera OFF';
       btn.classList.toggle('off', !cameraOn);
+      reportStatus();
+    });
+
+    document.getElementById('cardInput').addEventListener('change', async event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      note('Uploading card...');
+      const form = new FormData();
+      form.append('card', file);
+      try {
+        const response = await fetch('/api/host/card', { method: 'POST', body: form });
+        const result = await response.json();
+        note(result.success ? 'Card saved' : (result.message || 'Upload failed'));
+      } catch (err) {
+        note('Upload failed');
+      }
     });
 
     // --- Device selection --------------------------------------------------
