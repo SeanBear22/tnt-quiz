@@ -254,6 +254,21 @@
       color: #718096;
     }
 
+    #camControls .blurLabel {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      color: #cbd5e0;
+    }
+
+    #camControls .blurLabel input {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+
     #camControls .hint {
       color: #718096;
       font-size: 0.9em;
@@ -297,6 +312,10 @@
       <select id="micSelect"></select>
       <label for="vidSelect">Camera</label>
       <select id="vidSelect"></select>
+      <label class="blurLabel">
+        <input type="checkbox" id="blurInput">
+        Blur my background
+      </label>
       <label for="cardInput">Card shown when camera is off</label>
       <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
       <div class="hint">Best at 4:3, around 700&times;500. Other shapes are scaled to fill and cropped from the centre.</div>
@@ -652,11 +671,18 @@
     // slot starts the camera; there is no second tab to remember.
     let camMounted = false;
 
+    // Blur is a URL parameter, so changing it rebuilds the frame. That drops
+    // and re-establishes the connection, which takes a couple of seconds.
+    function blurWanted() {
+      return localStorage.getItem('tntQuizBlur') === '1';
+    }
+
     function mountSelfCamera(slot) {
       if (camMounted || !slot) return;
-      const url = vdoPushUrl(slot);
+      const url = vdoPushUrl(slot, { blur: blurWanted() });
       if (!url) return;
       const holder = document.getElementById('camSelf');
+      holder.textContent = '';
       const frame = document.createElement('iframe');
       frame.src = url;
       frame.allow = 'camera; microphone; autoplay; fullscreen; display-capture';
@@ -667,6 +693,7 @@
       camMounted = true;
 
       document.getElementById('camControls').style.display = 'block';
+      document.getElementById('blurInput').checked = blurWanted();
 
       // Device labels stay blank until the browser has granted camera
       // permission, which happens a little after the frame loads. Ask a few
@@ -681,6 +708,16 @@
 
       reportStatus();
     }
+
+    document.getElementById('blurInput').addEventListener('change', event => {
+      localStorage.setItem('tntQuizBlur', event.target.checked ? '1' : '0');
+      if (!mySlot) return;
+      note('Restarting camera...');
+      camMounted = false;
+      camFrame = null;
+      devicesNamed = false;
+      mountSelfCamera(mySlot);
+    });
 
     if (mySlot) mountSelfCamera(mySlot);
 

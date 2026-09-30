@@ -426,6 +426,21 @@
       color: #718096;
     }
 
+    #camControls .blurLabel {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      color: #cbd5e0;
+    }
+
+    #camControls .blurLabel input {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+
     #camControls .hint {
       color: #718096;
       font-size: 0.9em;
@@ -450,6 +465,10 @@
       <select id="micSelect"></select>
       <label for="vidSelect">Camera</label>
       <select id="vidSelect"></select>
+      <label class="blurLabel">
+        <input type="checkbox" id="blurInput">
+        Blur my background
+      </label>
       <label for="cardInput">Card shown when camera is off</label>
       <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
       <div class="hint">Best at 4:3, around 700&times;500. Other shapes are scaled to fill and cropped from the centre.</div>
@@ -698,15 +717,22 @@
       note('Camera changed');
     });
 
-    // Host camera starts with the page.
-    (function () {
-      const url = vdoPushUrl('host');
+    // Blur is a URL parameter, so changing it rebuilds the frame. That drops
+    // and re-establishes the connection, which takes a couple of seconds.
+    function blurWanted() {
+      return localStorage.getItem('tntQuizHostBlur') === '1';
+    }
+
+    function mountHostCamera() {
+      const url = vdoPushUrl('host', { blur: blurWanted() });
       if (!url) return;
+      const holder = document.getElementById('camSelf');
+      holder.textContent = '';
       const frame = document.createElement('iframe');
       frame.src = url;
       frame.allow = 'camera; microphone; autoplay; fullscreen; display-capture';
       frame.scrolling = 'no';
-      document.getElementById('camSelf').appendChild(frame);
+      holder.appendChild(frame);
       camFrame = frame;
 
       // Device labels stay blank until the browser has granted camera
@@ -719,7 +745,17 @@
           }, delay);
         });
       });
-    })();
+    }
+
+    document.getElementById('blurInput').checked = blurWanted();
+    document.getElementById('blurInput').addEventListener('change', event => {
+      localStorage.setItem('tntQuizHostBlur', event.target.checked ? '1' : '0');
+      note('Restarting camera...');
+      devicesNamed = false;
+      mountHostCamera();
+    });
+
+    mountHostCamera();
     let bankCache = [];
     let editingId = null;
     let rowImages = [

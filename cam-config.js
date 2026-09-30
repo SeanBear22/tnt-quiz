@@ -74,11 +74,16 @@ if (typeof window !== 'undefined' && window.CAM_LOCAL) {
 
 // Link each person opens (embedded in the quiz page). Pushes their camera and
 // mic into the room, and plays back everyone else's audio.
-function vdoPushUrl(seat) {
+//
+// options.blur adds VDO.Ninja's segmentation-based background blur. It is a
+// URL parameter rather than something switchable in place, so turning it on
+// or off rebuilds the frame and briefly reconnects.
+function vdoPushUrl(seat, options) {
   const id = VDO.streamIds[seat];
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
-  return 'https://vdo.ninja/?' + [
+  const blur = options && options.blur ? ['effects=3'] : [];
+  return 'https://vdo.ninja/?' + blur.concat([
     'room=' + encodeURIComponent(VDO.room),
     'password=' + encodeURIComponent(VDO.password),
     'push=' + encodeURIComponent(id),
@@ -94,7 +99,7 @@ function vdoPushUrl(seat) {
     'quality=1',
     'videobitrate=' + VDO.videoBitrate,
     'cleanoutput'
-  ].join('&') + audio;
+  ]).join('&') + audio;
 }
 
 // Link the viewer page uses per frame. Pulls one person's stream, with the UI
