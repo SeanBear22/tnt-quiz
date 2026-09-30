@@ -352,6 +352,17 @@
       width: 100%;
     }
 
+    #showAnswersButton {
+      background: #ffb400;
+      border-color: #ffb400;
+      color: #1a1a2e;
+    }
+
+    #showAnswersButton:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
     #revealButton {
       background: #e94560;
       border-color: #e94560;
@@ -592,6 +603,7 @@
       </div>
 
       <div class="bigActions" id="bigActions">
+        <button id="showAnswersButton">SHOW ANSWERS</button>
         <button id="revealButton">REVEAL</button>
         <button id="nextButton">NEXT QUESTION</button>
       </div>
@@ -953,6 +965,17 @@
             <button type="button" class="removeImgBtn aRemoveBtn" data-row="${i}">Remove</button>
           </div>
           <input type="file" class="aImgFile" data-row="${i}" accept="image/*" style="display:none;">
+          <div class="textOpts">
+            <label class="showTextLabel">
+              <input type="checkbox" class="answerShowTextInput" data-row="${i}" checked>
+              Show text over answer image
+            </label>
+            <select class="answerTextPosInput" data-row="${i}">
+              <option value="top">Top</option>
+              <option value="middle">Middle</option>
+              <option value="bottom" selected>Bottom</option>
+            </select>
+          </div>
         </div>
       `;
       qaRowsDiv.appendChild(row);
@@ -1094,6 +1117,8 @@
       document.querySelectorAll('.aInput').forEach(i => i.value = '');
       document.querySelectorAll('.showTextInput').forEach(i => i.checked = true);
       document.querySelectorAll('.textPosInput').forEach(i => i.value = 'bottom');
+      document.querySelectorAll('.answerShowTextInput').forEach(i => i.checked = true);
+      document.querySelectorAll('.answerTextPosInput').forEach(i => i.value = 'bottom');
       rowImages = [
         { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
         { q: null, a: null, audio: null }, { q: null, a: null, audio: null },
@@ -1119,6 +1144,8 @@
       const aInputs = document.querySelectorAll('.aInput');
       const showTextInputs = document.querySelectorAll('.showTextInput');
       const textPosInputs = document.querySelectorAll('.textPosInput');
+      const answerShowTextInputs = document.querySelectorAll('.answerShowTextInput');
+      const answerTextPosInputs = document.querySelectorAll('.answerTextPosInput');
 
       const questions = [];
       for (let i = 0; i < qInputs.length; i++) {
@@ -1132,7 +1159,9 @@
             answerImage: rowImages[i].a || null,
             questionAudio: rowImages[i].audio || null,
             showText: showTextInputs[i] ? showTextInputs[i].checked : true,
-            textPosition: textPosInputs[i] ? textPosInputs[i].value : 'bottom'
+            textPosition: textPosInputs[i] ? textPosInputs[i].value : 'bottom',
+            answerShowText: answerShowTextInputs[i] ? answerShowTextInputs[i].checked : true,
+            answerTextPosition: answerTextPosInputs[i] ? answerTextPosInputs[i].value : 'bottom'
           });
         }
       }
@@ -1197,9 +1226,14 @@
           setPreview('q', i, null);
         }
       });
+      const answerShowTextInputs = document.querySelectorAll('.answerShowTextInput');
+      const answerTextPosInputs = document.querySelectorAll('.answerTextPosInput');
+
       aInputs.forEach((input, i) => {
         const q = round.questions[i];
         input.value = q ? q.answer : '';
+        if (answerShowTextInputs[i]) answerShowTextInputs[i].checked = !q || q.answerShowText !== false;
+        if (answerTextPosInputs[i]) answerTextPosInputs[i].value = (q && q.answerTextPosition) || 'bottom';
         if (q && q.answerImage) {
           rowImages[i].a = q.answerImage;
           setPreview('a', i, q.answerImage);
@@ -1441,6 +1475,17 @@
         document.getElementById('currentAnswerText').textContent = '';
       }
 
+      // SHOW ANSWERS: count who has locked in, and grey the button out once
+      // the answers are up or the answer is revealed.
+      const seated = Object.values(players).filter(p => p.name);
+      const lockedIn = seated.filter(p => p.hasAnswered).length;
+      const showBtn = document.getElementById('showAnswersButton');
+      showBtn.disabled = !!(state.answersShown || state.revealed);
+      showBtn.textContent = state.answersShown
+        ? 'ANSWERS SHOWN'
+        : `SHOW ANSWERS (${lockedIn}/${seated.length})`;
+      showBtn.dataset.waiting = String(seated.length - lockedIn);
+
       renderSavedRounds(state);
 
       const area = document.getElementById('playersArea');
@@ -1519,6 +1564,15 @@
     document.getElementById('endGameButton').addEventListener('click', async () => {
       if (!confirm('End the game now and show the winner on stream?')) return;
       await fetch('/api/game/end', { method: 'POST' });
+      refreshStatus();
+    });
+
+    document.getElementById('showAnswersButton').addEventListener('click', async () => {
+      const waiting = Number(document.getElementById('showAnswersButton').dataset.waiting || 0);
+      if (waiting > 0 && !confirm(`${waiting} player(s) haven't locked in yet. Show everyone's answers anyway? Answering closes when you do.`)) {
+        return;
+      }
+      await fetch('/api/answers/show', { method: 'POST' });
       refreshStatus();
     });
 

@@ -207,6 +207,58 @@
       z-index: 1;
     }
 
+    /* SHOW ANSWERS: the question box split into quarters, one per seat, laid
+       out to match where each seat sits on screen. */
+    .answersGrid {
+      position: absolute;
+      inset: 7% 6% 9% 6%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      z-index: 1;
+    }
+
+    .answerCell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 2px solid rgba(255, 180, 0, 0.55);
+      border-radius: 10px;
+      overflow: hidden;
+      text-align: center;
+      min-width: 0;
+    }
+
+    .answerCell .who {
+      color: #ffb400;
+      font-size: 1.4em;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25em;
+    }
+
+    .answerCell .what {
+      color: #ffffff;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .answerCell .what.short  { font-size: 3em; }
+    .answerCell .what.medium { font-size: 2em; }
+    .answerCell .what.long   { font-size: 1.4em; }
+
+    .answerCell .what.none {
+      font-size: 1.6em;
+      color: #8a94a6;
+    }
+
+    .answerCell.emptySeat {
+      opacity: 0.25;
+    }
+
     .qaImageWrap {
       position: absolute;
       top: 6%;
@@ -255,6 +307,14 @@
       top: 50%;
       bottom: auto;
       transform: translateY(-50%);
+    }
+
+    /* An answer shown on its own over the answer image has no question
+       above it, so no divider either. */
+    .qaTextOverlay .answerLine.answerOnly {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }
 
     .qaTextOverlay .answerLine {
@@ -393,6 +453,27 @@
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // Quarters in screen order: seats 1 and 3 sit on the left, 2 and 4 on
+    // the right, so each answer appears on the same side as its player.
+    function buildAnswersHtml(players) {
+      const order = ['player1', 'player2', 'player3', 'player4'];
+      const cells = order.map(slot => {
+        const p = players[slot] || {};
+        if (!p.name) {
+          return `<div class="answerCell emptySeat"><div class="what none">—</div></div>`;
+        }
+        const answer = (p.answer || '').trim();
+        const size = !answer ? 'none'
+          : answer.length <= 14 ? 'short'
+          : answer.length <= 40 ? 'medium' : 'long';
+        return `<div class="answerCell">` +
+          `<div class="who">${esc(p.name.toUpperCase())}</div>` +
+          `<div class="what ${size}">${answer ? esc(answer) : 'No answer'}</div>` +
+          `</div>`;
+      });
+      return `<div class="answersGrid">${cells.join('')}</div>`;
+    }
+
     function buildWinnerHtml(players) {
       const joined = Object.values(players).filter(p => p.name);
       if (joined.length === 0) {
@@ -458,6 +539,8 @@
         setQuestionHtml(questionBox,
           `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}</div>` +
           frameOverlayHtml);
+      } else if (state.gameStarted && state.currentQuestion && state.answersShown) {
+        setQuestionHtml(questionBox, buildAnswersHtml(players) + frameOverlayHtml);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         const hasImage = q.questionImage || (state.revealed && q.answerImage);
@@ -472,19 +555,33 @@
             ? `<img src="/uploads/${esc(imgSrc)}">`
             : `<canvas class="waveform" data-src="/uploads/${esc(q.questionAudio)}"></canvas>`;
 
-          // The toggle governs the question text only. A revealed answer is
-          // always shown, since otherwise it would be unreadable unless the
-          // answer had an image of its own.
-          let textHtml = q.showText === false
+          // While the answer image is on screen its own settings apply: the
+          // answer text can be hidden when the picture is the answer, and has
+          // its own position. Otherwise the question's settings apply, and a
+          // revealed answer is always shown, since without an answer image it
+          // would otherwise not appear at all.
+          const showingAnswerImage = state.revealed && q.answerImage;
+          const questionLine = q.showText === false
             ? ''
             : `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
-          if (state.revealed) {
-            textHtml += `<div class="answerLine">${esc(q.answer)}</div>`;
+          let textHtml;
+          let position;
+          if (showingAnswerImage) {
+            textHtml = q.answerShowText === false
+              ? ''
+              : `<div class="answerLine answerOnly">${esc(q.answer)}</div>`;
+            position = q.answerTextPosition;
+          } else {
+            textHtml = questionLine;
+            if (state.revealed) {
+              textHtml += `<div class="answerLine">${esc(q.answer)}</div>`;
+            }
+            position = q.textPosition;
           }
 
-          const posClass = q.textPosition === 'top'
+          const posClass = position === 'top'
             ? ' posTop'
-            : q.textPosition === 'middle' ? ' posMiddle' : '';
+            : position === 'middle' ? ' posMiddle' : '';
 
           const overlayHtml = textHtml
             ? `<div class="qaTextOverlay${posClass}">${textHtml}</div>`

@@ -147,6 +147,9 @@ let players = {
 };
 
 let revealed = false;
+// Set by the host's SHOW ANSWERS button: every player's answer goes up on
+// screen. Answering is closed from that point. REVEAL clears it.
+let answersShown = false;
 let rounds = [];
 let gameStarted = false;
 let currentRoundIndex = 0;
@@ -240,6 +243,9 @@ function projectQuestion(question, isHost) {
     // saved rounds, which have neither field, behaving as before.
     showText: question.showText !== false,
     textPosition: question.textPosition || 'bottom',
+    // The same pair for the answer image, used once it is revealed.
+    answerShowText: question.answerShowText !== false,
+    answerTextPosition: question.answerTextPosition || 'bottom',
     questionAudio: question.questionAudio || null,
     answer: showAnswer ? question.answer : null,
     answerImage: showAnswer ? (question.answerImage || null) : null
@@ -250,7 +256,7 @@ function projectPlayers(isHost, ownSlot) {
   const out = {};
   for (const slot of Object.keys(players)) {
     const player = players[slot];
-    const canSeeAnswer = isHost || revealed || slot === ownSlot;
+    const canSeeAnswer = isHost || revealed || answersShown || slot === ownSlot;
     out[slot] = {
       name: player.name,
       answer: canSeeAnswer ? player.answer : null,
@@ -274,6 +280,7 @@ function buildState(role, ownSlot) {
   const state = {
     players: projectPlayers(isHost, ownSlot),
     revealed,
+    answersShown: answersShown && !revealed,
     gameStarted,
     roundCount: rounds.length,
     currentRoundIndex,
@@ -445,15 +452,24 @@ app.post('/api/submit', (req, res) => {
   if (!slot) {
     return res.status(401).json({ success: false, message: 'Claim a player slot first' });
   }
-  if (revealed) {
+  if (revealed || answersShown) {
     return res.status(409).json({ success: false, message: 'Answers are closed' });
   }
   players[slot].answer = typeof answer === 'string' ? answer.slice(0, 500) : '';
   res.json({ success: true });
 });
 
+app.post('/api/answers/show', requireHost, (req, res) => {
+  if (revealed) {
+    return res.json({ success: false, message: 'The answer is already revealed' });
+  }
+  answersShown = true;
+  res.json({ success: true });
+});
+
 app.post('/api/reveal', requireHost, (req, res) => {
   revealed = true;
+  answersShown = false;
   res.json({ success: true });
 });
 
@@ -503,6 +519,7 @@ app.post('/api/game/reset', requireHost, (req, res) => {
   currentQuestionIndex = 0;
   showRoundIntro = false;
   gameEnded = false;
+  answersShown = false;
   stopAudio();
   res.json({ success: true });
 });
@@ -552,6 +569,7 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
     showRoundIntro = false;
     revealed = false;
     gameEnded = false;
+    answersShown = false;
     stopAudio();
   }
   res.json({ success: true, roundCount: rounds.length });
@@ -564,6 +582,7 @@ app.post('/api/game/start', requireHost, (req, res) => {
     currentQuestionIndex = 0;
     showRoundIntro = true;
     gameEnded = false;
+    answersShown = false;
     stopAudio();
   }
   res.json({ success: true, started: gameStarted });
@@ -577,6 +596,7 @@ app.post('/api/game/end', requireHost, (req, res) => {
   }
   gameEnded = true;
   revealed = false;
+  answersShown = false;
   showRoundIntro = false;
   for (const slot in players) {
     players[slot].answer = null;
@@ -588,6 +608,7 @@ app.post('/api/game/end', requireHost, (req, res) => {
 
 app.post('/api/round/begin', requireHost, (req, res) => {
   showRoundIntro = false;
+  answersShown = false;
   stopAudio();
   res.json({ success: true });
 });
@@ -598,6 +619,7 @@ app.post('/api/next', requireHost, (req, res) => {
     players[slot].correct = null;
   }
   revealed = false;
+  answersShown = false;
   stopAudio();
 
   const currentRound = rounds[currentRoundIndex];

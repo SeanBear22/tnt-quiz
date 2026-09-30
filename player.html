@@ -103,12 +103,41 @@
       color: #1a1a2e;
     }
 
+    #questionDisplay .shownTitle {
+      font-size: 0.55em;
+      color: #ffb400;
+      margin-bottom: 10px;
+    }
+
+    #questionDisplay .shownAnswer {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 0.6em;
+      padding: 6px 4px;
+      border-top: 1px solid rgba(255, 180, 0, 0.25);
+      text-align: left;
+    }
+
+    #questionDisplay .shownAnswer .who {
+      color: #ffb400;
+      flex-shrink: 0;
+    }
+
+    #questionDisplay .shownAnswer .what {
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    /* A block of its own, so the question text always starts on the line
+       below rather than squeezing in beside the picture. */
     #questionDisplay img.qaImage {
+      display: block;
       max-width: 100%;
       max-height: 400px;
       width: auto;
       height: auto;
-      margin-bottom: 10px;
+      margin: 0 auto 10px auto;
       border-radius: 8px;
     }
 
@@ -459,6 +488,17 @@
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
         setQuestionHtml(questionBox, `ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}`);
+      } else if (state.gameStarted && state.currentQuestion && state.answersShown) {
+        const rows = ['player1', 'player2', 'player3', 'player4']
+          .filter(slot => players[slot] && players[slot].name)
+          .map(slot => {
+            const p = players[slot];
+            const answer = (p.answer || '').trim();
+            return `<div class="shownAnswer"><span class="who">${esc(p.name)}</span>` +
+              `<span class="what">${answer ? esc(answer) : 'No answer'}</span></div>`;
+          });
+        setQuestionHtml(questionBox,
+          `<div class="shownTitle">EVERYONE'S ANSWERS</div>${rows.join('')}`);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         let html = '';
@@ -521,14 +561,16 @@
           statusText.className = '';
         }
 
-        // Answering closes the moment the answer is revealed.
-        if (state.revealed && !hasLockedIn && !answersClosed) {
+        // Answering closes once everyone's answers are shown, or the answer
+        // is revealed, whichever comes first.
+        const closedNow = state.revealed || state.answersShown;
+        if (closedNow && !hasLockedIn && !answersClosed) {
           answersClosed = true;
           document.getElementById('answerInput').disabled = true;
           document.getElementById('lockButton').disabled = true;
           statusText.textContent = 'Answers are closed';
           statusText.className = '';
-        } else if (!state.revealed && answersClosed) {
+        } else if (!closedNow && answersClosed) {
           answersClosed = false;
           document.getElementById('answerInput').disabled = false;
           document.getElementById('answerInput').value = '';
