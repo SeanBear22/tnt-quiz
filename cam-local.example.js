@@ -1,0 +1,29 @@
+// Local overrides for this deployment. Copy to cam-local.js and edit.
+// cam-local.js is gitignored, so a git pull will never touch it.
+//
+// Only include the values you want to change. Anything left out keeps the
+// default from cam-config.js.
+
+window.CAM_LOCAL = {
+  password: 'set-a-real-password-here',
+
+
+  // Optional: give one person a heavier audio chain without restating the
+  // others. The gate is aggressive, so only use it where it is needed.
+  // audioChain: {
+  //   player3: '&lowcut=100&compressor&noisegate&noisegatesettings=3,20,2500'
+  // },
+
+  // Optional: lower this if anyone's connection struggles.
+  // videoBitrate: 900,
+
+  // Optional: background blur strength when someone ticks the blur box.
+  // Default is 20. Higher is stronger.
+  // blurStrength: 30,
+
+  // Optional: mirror the feeds on the viewer page. false (the default) shows
+  // what the camera actually sees, so writing reads the right way round.
+  // mirror: true,
+  // ...or per seat:
+  // mirror: { player2: true }
+};

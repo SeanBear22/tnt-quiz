@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>TNT Nerds - Viewer</title>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
 
@@ -17,6 +17,29 @@
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+    }
+
+    /* The quote box sits over the white paper strip in the background image.
+       Its position is set by script from the image's own coordinates, so it
+       stays on the paper at any window size. */
+    #quoteBox {
+      position: fixed;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+      pointer-events: none;
+      font-family: 'Bangers', Impact, sans-serif;
+      letter-spacing: 0.03em;
+      line-height: 1.05;
+      color: #1b1b1b;
+    }
+
+    #quoteBox span {
+      display: block;
+      overflow-wrap: break-word;
     }
 
     .layout {
@@ -51,7 +74,33 @@
       height: 280.5px;
     }
 
+    /* Sits inside the cutout, so it is clipped to the same opening the video
+       fills rather than spilling over the frame artwork. cover scales the
+       image up or down to fill and crops the overflow, centred. */
+    .frameWrap .camWindowOverlay .cardOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background-color: #131c2b;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      display: none;
+    }
+
+    .frameWrap .camWindowOverlay .cardOverlay.visible {
+      display: block;
+    }
+
+    .frameWrap .camWindowOverlay iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
     .frameWrap .camWindowOverlay {
+      overflow: hidden;
       position: absolute;
       top: 4.26%;
       left: 3.52%;
@@ -181,6 +230,58 @@
       z-index: 1;
     }
 
+    /* SHOW ANSWERS: the question box split into quarters, one per seat, laid
+       out to match where each seat sits on screen. */
+    .answersGrid {
+      position: absolute;
+      inset: 7% 6% 9% 6%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 14px;
+      z-index: 1;
+    }
+
+    .answerCell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 2px solid rgba(255, 180, 0, 0.55);
+      border-radius: 10px;
+      overflow: hidden;
+      text-align: center;
+      min-width: 0;
+    }
+
+    .answerCell .who {
+      color: #ffb400;
+      font-size: 1.4em;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25em;
+    }
+
+    .answerCell .what {
+      color: #ffffff;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+
+    .answerCell .what.short  { font-size: 3em; }
+    .answerCell .what.medium { font-size: 2em; }
+    .answerCell .what.long   { font-size: 1.4em; }
+
+    .answerCell .what.none {
+      font-size: 1.6em;
+      color: #8a94a6;
+    }
+
+    .answerCell.emptySeat {
+      opacity: 0.25;
+    }
+
     .qaImageWrap {
       position: absolute;
       top: 6%;
@@ -192,6 +293,13 @@
       justify-content: center;
       z-index: 1;
       overflow: hidden;
+    }
+
+    .qaImageWrap canvas.waveform {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0d1420;
     }
 
     .qaImageWrap img {
@@ -211,6 +319,25 @@
       padding: 14px 20px;
       font-size: 2em;
       line-height: 1.3;
+    }
+
+    .qaTextOverlay.posTop {
+      top: 8%;
+      bottom: auto;
+    }
+
+    .qaTextOverlay.posMiddle {
+      top: 50%;
+      bottom: auto;
+      transform: translateY(-50%);
+    }
+
+    /* An answer shown on its own over the answer image has no question
+       above it, so no divider either. */
+    .qaTextOverlay .answerLine.answerOnly {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
     }
 
     .qaTextOverlay .answerLine {
@@ -238,26 +365,39 @@
       pointer-events: none;
     }
 
-    .winnerTitle {
-      color: #ffb400;
-      font-size: 1.3em;
-      margin-bottom: 10px;
+    .winnerLabel {
+      font-size: 0.6em;
+      letter-spacing: 0.08em;
+      color: #e6e6e6;
+      margin-bottom: 0.35em;
     }
 
-    .winnerName {
-      color: #2ecc71;
-      font-size: 1.4em;
-      margin-bottom: 20px;
+    .winnerList {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15em;
+      color: #ffffff;
     }
 
-    .scoreboardList {
-      font-size: 0.55em;
-      line-height: 1.8;
-      font-family: 'Trebuchet MS', Arial, sans-serif;
+    .winnerLine {
+      white-space: nowrap;
+      font-size: 1.35em;
+    }
+
+    /* Several names share the box, so each is set a little smaller. */
+    .winnerList.count2 .winnerLine { font-size: 1.1em; }
+    .winnerList.count3 .winnerLine { font-size: 0.9em; }
+    .winnerList.count4 .winnerLine { font-size: 0.75em; }
+
+    .winnerStar {
+      font-size: 0.8em;
+      vertical-align: 0.05em;
     }
   </style>
 </head>
 <body>
+  <div id="quoteBox"><span id="quoteText"></span></div>
   <div class="layout">
     <div id="hostBox">
       <div class="frameWrap">
@@ -324,75 +464,170 @@
     </div>
   </div>
 
+  <script src="cam-local.js"></script>
+  <script src="cam-config.js"></script>
+  <script src="quiz-audio.js"></script>
   <script>
-    function buildWinnerHtml(players) {
-      const joined = Object.values(players).filter(p => p.name);
-
-      if (joined.length === 0) {
-        return `<div class="qTextOnly">Show finished!</div>`;
-      }
-
-      const maxScore = Math.max(...joined.map(p => p.score));
-      const winners = joined.filter(p => p.score === maxScore);
-      const sorted = [...joined].sort((a, b) => b.score - a.score);
-
-      const winnerLine = winners.length > 1
-        ? `IT'S A TIE! (${maxScore} pts)`
-        : `${winners[0].name.toUpperCase()} (${maxScore} pts)`;
-
-      const scoreboardHtml = sorted
-        .map(p => `${p.name}: ${p.score}`)
-        .join('<br>');
-
-      return `
-        <div class="qTextOnly">
-          <div class="winnerTitle">🏆 GAME OVER 🏆</div>
-          <div class="winnerName">${winnerLine}</div>
-          <div class="scoreboardList">${scoreboardHtml}</div>
-        </div>
-      `;
+    // Everything typed by a person (names, answers, questions, round titles)
+    // goes through this before being placed in the page, so it is shown as
+    // text and can never run as code on the stream.
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
+    // Quarters in screen order: seats 1 and 3 sit on the left, 2 and 4 on
+    // the right, so each answer appears on the same side as its player.
+    function buildAnswersHtml(players) {
+      const order = ['player1', 'player2', 'player3', 'player4'];
+      const cells = order.map(slot => {
+        const p = players[slot] || {};
+        if (!p.name) {
+          return `<div class="answerCell emptySeat"><div class="what none">—</div></div>`;
+        }
+        const answer = (p.answer || '').trim();
+        const size = !answer ? 'none'
+          : answer.length <= 14 ? 'short'
+          : answer.length <= 40 ? 'medium' : 'long';
+        return `<div class="answerCell">` +
+          `<div class="who">${esc(p.name.toUpperCase())}</div>` +
+          `<div class="what ${size}">${answer ? esc(answer) : 'No answer'}</div>` +
+          `</div>`;
+      });
+      return `<div class="answersGrid">${cells.join('')}</div>`;
+    }
+
+    function buildWinnerHtml(players) {
+      const joined = Object.values(players).filter(p => p.name);
+      if (joined.length === 0) {
+        return '<div class="qTextOnly">' + `<div class="winnerLabel">GAME OVER</div>` + '</div>';
+      }
+
+      // Top score wins; everyone on it shares the win, listed A to Z.
+      const top = Math.max(...joined.map(p => p.score));
+      const winners = joined
+        .filter(p => p.score === top)
+        .map(p => p.name.toUpperCase())
+        .sort((a, b) => a.localeCompare(b));
+
+      const label = winners.length > 1 ? 'WINNERS' : 'WINNER';
+      const lines = winners
+        .map(name => `<div class="winnerLine"><span class="winnerStar">⭐</span> ${esc(name)} <span class="winnerStar">⭐</span></div>`)
+        .join('');
+
+      return '<div class="qTextOnly">' +
+        `<div class="winnerLabel">${label}</div>` +
+        `<div class="winnerList count${Math.min(winners.length, 4)}">${lines}</div>` +
+        '</div>';
+    }
+
+    // The question area is only rewritten when its content actually changes.
+    // Rewriting it every second would restart the waveform animation and, on
+    // pages that play the clip, cut it off.
+    let lastQuestionHtml = null;
+    function setQuestionHtml(box, html) {
+      if (html === lastQuestionHtml) return;
+      lastQuestionHtml = html;
+      box.innerHTML = html;
+      QuizAudio.drawAll(box);
+    }
+
+    // /viewer?noaudio is for people watching the layout; keep the clip silent
+    // there as well as the camera audio. OBS uses the plain URL and needs it.
+    if (location.search.indexOf('noaudio') !== -1) QuizAudio.setMuted(true);
+
     async function refreshViewer() {
-      const response = await fetch('/api/state');
+      const response = await fetch('/api/state/viewer');
       const state = await response.json();
       const players = state.players;
 
       document.getElementById('hostLabel').textContent = state.hostName ? state.hostName.toUpperCase() : 'HOST';
+      showQuote(state.quote);
+
+      const hostCard = document.querySelector('#hostBox .cardOverlay');
+      if (hostCard) {
+        hostCard.classList.toggle('visible', !!state.hostCameraOff);
+        hostCard.style.backgroundImage = state.hostCardImage
+          ? `url('/uploads/${encodeURIComponent(state.hostCardImage)}')`
+          : 'none';
+      }
+
+      setFeed(document.querySelector('#hostBox .camWindowOverlay'), 'host', state.hostStreamId);
+
+      QuizAudio.sync(state);
 
       const questionBox = document.getElementById('questionText');
       const frameOverlayHtml = '<img class="qFrameOverlay" src="Q-frame.png" alt="">';
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
-        questionBox.innerHTML =
-          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${state.currentRoundTitle}</div>` +
-          frameOverlayHtml;
+        setQuestionHtml(questionBox,
+          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}</div>` +
+          frameOverlayHtml);
+      } else if (state.gameStarted && state.currentQuestion && state.answersShown) {
+        setQuestionHtml(questionBox, buildAnswersHtml(players) + frameOverlayHtml);
       } else if (state.gameStarted && state.currentQuestion) {
         const q = state.currentQuestion;
         const hasImage = q.questionImage || (state.revealed && q.answerImage);
+        const hasMedia = hasImage || q.questionAudio;
 
-        if (hasImage) {
+        if (hasMedia) {
           const imgSrc = state.revealed && q.answerImage ? q.answerImage : q.questionImage;
-          let textHtml = `Q${state.currentQuestionIndex + 1}: ${q.question}`;
-          if (state.revealed) {
-            textHtml += `<div class="answerLine">${q.answer}</div>`;
+
+          // An image always wins. An audio question with no image shows the
+          // clip's waveform in the same space instead.
+          const mediaHtml = imgSrc
+            ? `<img src="/uploads/${esc(imgSrc)}">`
+            : `<canvas class="waveform" data-src="/uploads/${esc(q.questionAudio)}"></canvas>`;
+
+          // While the answer image is on screen its own settings apply: the
+          // answer text can be hidden when the picture is the answer, and has
+          // its own position. Otherwise the question's settings apply, and a
+          // revealed answer is always shown, since without an answer image it
+          // would otherwise not appear at all.
+          const showingAnswerImage = state.revealed && q.answerImage;
+          const questionLine = q.showText === false
+            ? ''
+            : `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
+          let textHtml;
+          let position;
+          if (showingAnswerImage) {
+            textHtml = q.answerShowText === false
+              ? ''
+              : `<div class="answerLine answerOnly">${esc(q.answer)}</div>`;
+            position = q.answerTextPosition;
+          } else {
+            textHtml = questionLine;
+            if (state.revealed) {
+              textHtml += `<div class="answerLine">${esc(q.answer)}</div>`;
+            }
+            position = q.textPosition;
           }
-          questionBox.innerHTML = `
-            <div class="qaImageWrap"><img src="/uploads/${imgSrc}"></div>
-            <div class="qaTextOverlay">${textHtml}</div>
+
+          const posClass = position === 'top'
+            ? ' posTop'
+            : position === 'middle' ? ' posMiddle' : '';
+
+          const overlayHtml = textHtml
+            ? `<div class="qaTextOverlay${posClass}">${textHtml}</div>`
+            : '';
+
+          setQuestionHtml(questionBox, `
+            <div class="qaImageWrap">${mediaHtml}</div>
+            ${overlayHtml}
             ${frameOverlayHtml}
-          `;
+          `);
         } else {
-          let html = `Q${state.currentQuestionIndex + 1}: ${q.question}`;
+          let html = `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
           if (state.revealed) {
-            html += `<div class="answerLine">${q.answer}</div>`;
+            html += `<div class="answerLine">${esc(q.answer)}</div>`;
           }
-          questionBox.innerHTML = `<div class="qTextOnly">${html}</div>` + frameOverlayHtml;
+          setQuestionHtml(questionBox, `<div class="qTextOnly">${html}</div>` + frameOverlayHtml);
         }
       } else if (state.gameStarted) {
-        questionBox.innerHTML = buildWinnerHtml(players) + frameOverlayHtml;
+        setQuestionHtml(questionBox, buildWinnerHtml(players) + frameOverlayHtml);
       } else {
-        questionBox.innerHTML = `<div class="qTextOnly">Get ready...</div>` + frameOverlayHtml;
+        setQuestionHtml(questionBox, `<div class="qTextOnly">Get ready...</div>` + frameOverlayHtml);
       }
 
       document.querySelectorAll('.playerSlot').forEach(el => {
@@ -406,6 +641,17 @@
         nameLabel.textContent = info.name ? info.name.toUpperCase() : '(EMPTY)';
         scoreNum.textContent = info.score;
 
+        const wrap = el.querySelector('.frameWrap');
+        const card = wrap ? wrap.querySelector('.cardOverlay') : null;
+
+        if (card) {
+          card.classList.toggle('visible', !!info.cameraOff);
+          card.style.backgroundImage = info.cardImage
+            ? `url('/uploads/${encodeURIComponent(info.cardImage)}')`
+            : 'none';
+        }
+
+        setFeed(el.querySelector('.camWindowOverlay'), slot, info.streamId);
         if (state.revealed && info.correct === true) {
           frameImg.src = 'player-frame-green.png';
         } else if (state.revealed && info.correct === false) {
@@ -415,6 +661,97 @@
         }
       });
     }
+
+    // Each frame's cutout holds the person's feed (an iframe) and their card.
+    // A feed is only shown once the server says that seat's camera is live,
+    // using the random stream ID it issued, so an empty seat shows nothing and
+    // nobody else can publish into it. The frame PNG sits above at z-index 2,
+    // so the green/red/grey swap keeps working over the video.
+    function prepareCutouts() {
+      document.querySelectorAll('.camWindowOverlay').forEach(overlay => {
+        overlay.textContent = '';
+        const card = document.createElement('div');
+        card.className = 'cardOverlay';
+        overlay.appendChild(card);
+      });
+    }
+
+    function setFeed(overlay, seat, streamId) {
+      if (!overlay) return;
+      const wanted = streamId || '';
+      if ((overlay.dataset.stream || '') === wanted) return;
+      overlay.dataset.stream = wanted;
+
+      const old = overlay.querySelector('iframe');
+      if (old) old.remove();
+      if (!wanted) return;
+
+      const url = vdoViewUrl(seat, wanted);
+      if (!url) return;
+      const frame = document.createElement('iframe');
+      frame.src = url;
+      frame.allow = 'autoplay';
+      frame.scrolling = 'no';
+      overlay.insertBefore(frame, overlay.firstChild);
+    }
+
+    prepareCutouts();
+
+    // --- Quote box ------------------------------------------------------
+    // The background is drawn with background-size: cover, centred, so the
+    // image is scaled by whichever of width or height needs the larger factor
+    // and the overflow is cropped equally from both sides. The same sums place
+    // the box on the paper. The rectangle is inside the paper's torn edges and
+    // clear of both yellow quote marks, measured on the 1672x941 image.
+    const BG_SIZE = { w: 1672, h: 941 };
+    const QUOTE_AREA = { left: 1208, top: 100, right: 1460, bottom: 228 };
+    let shownQuote = null;
+
+    function placeQuoteBox() {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const scale = Math.max(vw / BG_SIZE.w, vh / BG_SIZE.h);
+      const offsetX = (vw - BG_SIZE.w * scale) / 2;
+      const offsetY = (vh - BG_SIZE.h * scale) / 2;
+      const box = document.getElementById('quoteBox');
+      box.style.left = (offsetX + QUOTE_AREA.left * scale) + 'px';
+      box.style.top = (offsetY + QUOTE_AREA.top * scale) + 'px';
+      box.style.width = ((QUOTE_AREA.right - QUOTE_AREA.left) * scale) + 'px';
+      box.style.height = ((QUOTE_AREA.bottom - QUOTE_AREA.top) * scale) + 'px';
+      fitQuote();
+    }
+
+    // Largest font size at which the whole quote fits inside the box, found
+    // by halving the range rather than stepping down a pixel at a time.
+    function fitQuote() {
+      const box = document.getElementById('quoteBox');
+      const text = document.getElementById('quoteText');
+      if (!text.textContent) return;
+      let low = 6;
+      let high = Math.max(low, box.clientHeight * 0.75);
+      while (high - low > 0.5) {
+        const mid = (low + high) / 2;
+        text.style.fontSize = mid + 'px';
+        const fits = text.scrollWidth <= box.clientWidth && text.scrollHeight <= box.clientHeight;
+        if (fits) low = mid; else high = mid;
+      }
+      text.style.fontSize = low + 'px';
+    }
+
+    function showQuote(quote) {
+      const value = quote || '';
+      if (value === shownQuote) return;
+      shownQuote = value;
+      document.getElementById('quoteText').textContent = value;
+      fitQuote();
+    }
+
+    window.addEventListener('resize', placeQuoteBox);
+    // Measure with Bangers itself, not the fallback font, once it has loaded.
+    if (document.fonts && document.fonts.load) {
+      document.fonts.load('40px Bangers').then(() => { shownQuote = null; placeQuoteBox(); });
+    }
+    placeQuoteBox();
 
     setInterval(refreshViewer, 1000);
     refreshViewer();

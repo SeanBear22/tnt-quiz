@@ -1,0 +1,16 @@
+# Lines for the quote box at the top right of the viewer screen.
+#
+# One entry per line. Add a line to add a quote, delete a line to remove it.
+# Blank lines, and lines starting with #, are ignored.
+#
+# A new quote is picked at random each time the host presses REVEAL, and no
+# quote comes round again until every other one has been shown.
+#
+# Short lines read best: the box is small on stream, and longer quotes are
+# shrunk to fit. After editing on GitHub, pull on the server to pick up the
+# change; no restart needed.
+
+Nerd rage is a valid strategy
+Roll for initiative
+It's not cheating, it's lateral thinking
+Confidence is key. Accuracy is optional.
