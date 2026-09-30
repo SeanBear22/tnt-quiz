@@ -424,11 +424,22 @@
       QuizAudio.resume();
     });
 
+    // Checks can overlap on a slow connection. An answer to a check sent
+    // before this browser took its seat says "no seat", and acting on it would
+    // throw the new seat away. So each answer is only used if the seat token
+    // hasn't changed since it was asked, and it isn't older than one already used.
+    let stateRequestCount = 0;
+    let lastStateApplied = 0;
+
     async function refreshButtons() {
+      const requestNumber = ++stateRequestCount;
+      const tokenUsed = myToken;
       const response = await fetch('/api/state', {
-        headers: myToken ? { 'X-Player-Token': myToken } : {}
+        headers: tokenUsed ? { 'X-Player-Token': tokenUsed } : {}
       });
       const state = await response.json();
+      if (tokenUsed !== myToken || requestNumber < lastStateApplied) return;
+      lastStateApplied = requestNumber;
       const players = state.players;
       lastState = state;
 
