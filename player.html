@@ -120,22 +120,34 @@
       border-top: 3px dashed #ffb400;
     }
 
-    .winnerTitle {
-      color: #ffb400;
+    .winnerLabel {
       font-size: 0.7em;
-      margin-bottom: 10px;
+      letter-spacing: 0.08em;
+      color: #e6e6e6;
+      margin-bottom: 0.35em;
     }
 
-    .winnerName {
-      color: #2ecc71;
-      font-size: 0.75em;
-      margin-bottom: 20px;
+    .winnerList {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15em;
+      color: #ffffff;
     }
 
-    .scoreboardList {
-      font-size: 0.4em;
-      line-height: 1.8;
-      font-family: 'Trebuchet MS', Arial, sans-serif;
+    .winnerLine {
+      white-space: nowrap;
+      font-size: 1.35em;
+    }
+
+    /* Several names share the box, so each is set a little smaller. */
+    .winnerList.count2 .winnerLine { font-size: 1.1em; }
+    .winnerList.count3 .winnerLine { font-size: 0.9em; }
+    .winnerList.count4 .winnerLine { font-size: 0.75em; }
+
+    .winnerStar {
+      font-size: 0.8em;
+      vertical-align: 0.05em;
     }
 
     #answerArea {
@@ -373,28 +385,24 @@
 
     function buildWinnerHtml(players) {
       const joined = Object.values(players).filter(p => p.name);
-
       if (joined.length === 0) {
-        return 'Show finished!';
+        return `<div class="winnerLabel">GAME OVER</div>`;
       }
 
-      const maxScore = Math.max(...joined.map(p => p.score));
-      const winners = joined.filter(p => p.score === maxScore);
-      const sorted = [...joined].sort((a, b) => b.score - a.score);
+      // Top score wins; everyone on it shares the win, listed A to Z.
+      const top = Math.max(...joined.map(p => p.score));
+      const winners = joined
+        .filter(p => p.score === top)
+        .map(p => p.name.toUpperCase())
+        .sort((a, b) => a.localeCompare(b));
 
-      const winnerLine = winners.length > 1
-        ? `IT'S A TIE! (${maxScore} pts)`
-        : `${esc(winners[0].name.toUpperCase())} (${maxScore} pts)`;
+      const label = winners.length > 1 ? 'WINNERS' : 'WINNER';
+      const lines = winners
+        .map(name => `<div class="winnerLine"><span class="winnerStar">⭐</span> ${esc(name)} <span class="winnerStar">⭐</span></div>`)
+        .join('');
 
-      const scoreboardHtml = sorted
-        .map(p => `${esc(p.name)}: ${p.score}`)
-        .join('<br>');
-
-      return `
-        <div class="winnerTitle">🏆 GAME OVER 🏆</div>
-        <div class="winnerName">${winnerLine}</div>
-        <div class="scoreboardList">${scoreboardHtml}</div>
-      `;
+      return `<div class="winnerLabel">${label}</div>` +
+        `<div class="winnerList count${Math.min(winners.length, 4)}">${lines}</div>`;
     }
 
     // The question area is only rewritten when its content actually changes,

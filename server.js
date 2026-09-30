@@ -170,6 +170,9 @@ let hostCardImage = null;
 let hostStreamId = newStreamId('tnt_host');
 let hostCamLive = false;
 let showRoundIntro = false;
+// Set by the host's END GAME button. While true the current question is
+// withheld from every page, which is what makes them show the winner.
+let gameEnded = false;
 let bankedRounds = [];
 
 function loadBank() {
@@ -275,7 +278,8 @@ function buildState(role, ownSlot) {
     roundCount: rounds.length,
     currentRoundIndex,
     currentRoundTitle: currentRound ? currentRound.title : null,
-    currentQuestion: projectQuestion(currentQuestion, isHost),
+    currentQuestion: gameEnded ? null : projectQuestion(currentQuestion, isHost),
+    gameEnded,
     currentQuestionIndex,
     questionsInRound: currentRound ? currentRound.questions.length : 0,
     hostName,
@@ -498,6 +502,7 @@ app.post('/api/game/reset', requireHost, (req, res) => {
   currentRoundIndex = 0;
   currentQuestionIndex = 0;
   showRoundIntro = false;
+  gameEnded = false;
   stopAudio();
   res.json({ success: true });
 });
@@ -546,6 +551,7 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
     currentQuestionIndex = 0;
     showRoundIntro = false;
     revealed = false;
+    gameEnded = false;
     stopAudio();
   }
   res.json({ success: true, roundCount: rounds.length });
@@ -557,9 +563,27 @@ app.post('/api/game/start', requireHost, (req, res) => {
     currentRoundIndex = 0;
     currentQuestionIndex = 0;
     showRoundIntro = true;
+    gameEnded = false;
     stopAudio();
   }
   res.json({ success: true, started: gameStarted });
+});
+
+// Ends the show: every page drops the current question and shows the winner.
+// Scores are kept. RESET GAME or START GAME clears it.
+app.post('/api/game/end', requireHost, (req, res) => {
+  if (!gameStarted) {
+    return res.json({ success: false, message: 'The game has not started' });
+  }
+  gameEnded = true;
+  revealed = false;
+  showRoundIntro = false;
+  for (const slot in players) {
+    players[slot].answer = null;
+    players[slot].correct = null;
+  }
+  stopAudio();
+  res.json({ success: true });
 });
 
 app.post('/api/round/begin', requireHost, (req, res) => {

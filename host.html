@@ -335,6 +335,15 @@
       flex: 1;
     }
 
+    #endGameButton {
+      width: 100%;
+      padding: 10px;
+      margin-top: 16px;
+      background: transparent;
+      color: #ffb400;
+      border: 2px solid #ffb400;
+    }
+
     #startButton, #startRoundButton {
       background: #ffb400;
       color: #1a1a2e;
@@ -574,6 +583,7 @@
         </div>
         <button id="startButton">START GAME</button>
         <button id="startRoundButton" style="display:none;">START ROUND</button>
+        <button id="endGameButton" style="display:none;">END GAME</button>
       </div>
 
       <div class="card">
@@ -1392,6 +1402,8 @@
         state.audio && state.audio.playing ? '&#8635; PLAY FROM START' : '&#9654; PLAY CLIP';
 
       document.getElementById('startButton').style.display = state.gameStarted ? 'none' : 'block';
+      document.getElementById('endGameButton').style.display =
+        state.gameStarted && !state.gameEnded ? 'block' : 'none';
       document.getElementById('startRoundButton').style.display =
         (state.gameStarted && state.showRoundIntro) ? 'block' : 'none';
       document.getElementById('bigActions').style.display =
@@ -1410,8 +1422,18 @@
           `Correct answer: ${state.currentQuestion.answer}`;
       } else if (state.gameStarted) {
         document.getElementById('currentRoundText').textContent = 'Show finished!';
-        document.getElementById('currentQuestionText').textContent = '';
-        document.getElementById('currentAnswerText').textContent = '';
+        const joined = Object.values(state.players).filter(p => p.name);
+        if (joined.length) {
+          const top = Math.max(...joined.map(p => p.score));
+          const names = joined.filter(p => p.score === top).map(p => p.name)
+            .sort((a, b) => a.localeCompare(b));
+          document.getElementById('currentQuestionText').textContent =
+            (names.length > 1 ? 'Winners: ' : 'Winner: ') + names.join(', ') + ` (${top} pts)`;
+        } else {
+          document.getElementById('currentQuestionText').textContent = '';
+        }
+        document.getElementById('currentAnswerText').textContent =
+          'Press RESET GAME to clear scores and seats for the next show.';
       } else {
         document.getElementById('currentRoundText').textContent =
           `${state.roundCount} round(s) loaded for tonight.`;
@@ -1491,6 +1513,12 @@
 
     document.getElementById('audioStopButton').addEventListener('click', async () => {
       await fetch('/api/audio/stop', { method: 'POST' });
+      refreshStatus();
+    });
+
+    document.getElementById('endGameButton').addEventListener('click', async () => {
+      if (!confirm('End the game now and show the winner on stream?')) return;
+      await fetch('/api/game/end', { method: 'POST' });
       refreshStatus();
     });
 
