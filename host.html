@@ -395,6 +395,13 @@
       color: #718096;
     }
 
+    #camControls .hint {
+      color: #718096;
+      font-size: 0.9em;
+      line-height: 1.3;
+      margin: -2px 0 6px 0;
+    }
+
     #camControls .note {
       color: #718096;
       min-height: 1em;
@@ -414,6 +421,7 @@
       <select id="vidSelect"></select>
       <label for="cardInput">Card shown when camera is off</label>
       <input id="cardInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+      <div class="hint">Best at 4:3, around 700&times;500. Other shapes are scaled to fill and cropped from the centre.</div>
       <div class="note" id="camNote"></div>
     </div>
     <div id="camSelf"></div>

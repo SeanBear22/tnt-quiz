@@ -51,17 +51,21 @@
       height: 280.5px;
     }
 
-    .frameWrap .cardOverlay {
+    /* Sits inside the cutout, so it is clipped to the same opening the video
+       fills rather than spilling over the frame artwork. cover scales the
+       image up or down to fill and crops the overflow, centred. */
+    .frameWrap .camWindowOverlay .cardOverlay {
       position: absolute;
       inset: 0;
-      z-index: 1;
+      z-index: 2;
       background-color: #131c2b;
       background-size: cover;
       background-position: center;
+      background-repeat: no-repeat;
       display: none;
     }
 
-    .frameWrap .cardOverlay.visible {
+    .frameWrap .camWindowOverlay .cardOverlay.visible {
       display: block;
     }
 
@@ -73,6 +77,7 @@
     }
 
     .frameWrap .camWindowOverlay {
+      overflow: hidden;
       position: absolute;
       top: 4.26%;
       left: 3.52%;
@@ -474,7 +479,7 @@
 
         const card = document.createElement('div');
         card.className = 'cardOverlay';
-        overlay.parentElement.appendChild(card);
+        overlay.appendChild(card);
       });
 
       const hostOverlay = document.querySelector('#hostBox .camWindowOverlay');
@@ -490,7 +495,7 @@
 
           const card = document.createElement('div');
           card.className = 'cardOverlay';
-          hostOverlay.parentElement.appendChild(card);
+          hostOverlay.appendChild(card);
         }
       }
     }
