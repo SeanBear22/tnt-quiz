@@ -55,7 +55,11 @@ const VDO = {
   // that is normally what you want going out on a broadcast. Set to true if
   // you would rather everyone appear as they see themselves. Can be set per
   // seat with an object, e.g. mirror: { player2: true }.
-  mirror: false
+  mirror: false,
+
+  // Background blur strength, 1-10, used when someone ticks the blur box.
+  // 5 is a moderate blur that still reads as a room behind you.
+  blurStrength: 5
 };
 
 // Apply cam-local.js if one is present. Top-level keys replace the defaults;
@@ -75,14 +79,21 @@ if (typeof window !== 'undefined' && window.CAM_LOCAL) {
 // Link each person opens (embedded in the quiz page). Pushes their camera and
 // mic into the room, and plays back everyone else's audio.
 //
-// options.blur adds VDO.Ninja's segmentation-based background blur. It is a
-// URL parameter rather than something switchable in place, so turning it on
-// or off rebuilds the frame and briefly reconnects.
+// options.blur adds VDO.Ninja's segmentation-based background blur, using the
+// &backgroundblur alias so the strength comes with it. It is a URL parameter
+// rather than something switchable in place, so turning it on or off rebuilds
+// the frame and briefly reconnects.
+//
+// VDO.Ninja saves effect settings in its own localStorage against the room and
+// stream ID. A stored setting can win over the URL, so if blur does not take
+// effect, clear site data for vdo.ninja in the browser.
 function vdoPushUrl(seat, options) {
   const id = VDO.streamIds[seat];
   if (!id) return null;
   const audio = VDO.audioChain[seat] || VDO.audioChain.default;
-  const blur = options && options.blur ? ['effects=3'] : [];
+  const blur = options && options.blur
+    ? ['backgroundblur=' + (VDO.blurStrength || 5)]
+    : [];
   return 'https://vdo.ninja/?' + blur.concat([
     'room=' + encodeURIComponent(VDO.room),
     'password=' + encodeURIComponent(VDO.password),
