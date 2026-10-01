@@ -548,8 +548,14 @@ app.post('/api/answers/show', requireHost, (req, res) => {
 });
 
 app.post('/api/reveal', requireHost, (req, res) => {
-  // A second press on the same question shouldn't skip a quote.
-  if (!revealed) pickQuote();
+  // A second press on the same question shouldn't skip a quote, or award
+  // the points twice.
+  if (!revealed) {
+    pickQuote();
+    for (const slot in players) {
+      if (players[slot].correct === true) players[slot].score += 1;
+    }
+  }
   revealed = true;
   answersShown = false;
   res.json({ success: true });
@@ -560,11 +566,16 @@ app.post('/api/mark', requireHost, (req, res) => {
   const player = players[slot];
   if (!player) return res.json({ success: false });
 
-  if (player.correct === true && value !== true) {
-    player.score -= 1;
-  }
-  if (value === true && player.correct !== true) {
-    player.score += 1;
+  // Before the reveal a mark is only a decision: the point is added when the
+  // host presses REVEAL, at the same moment the frames turn green or red.
+  // After the reveal (a late correction) the change applies straight away.
+  if (revealed) {
+    if (player.correct === true && value !== true) {
+      player.score -= 1;
+    }
+    if (value === true && player.correct !== true) {
+      player.score += 1;
+    }
   }
   player.correct = value;
 

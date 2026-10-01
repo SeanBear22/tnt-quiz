@@ -1513,7 +1513,12 @@
         scoreDiv.appendChild(minusBtn);
 
         const scoreLabel = document.createElement('span');
-        scoreLabel.textContent = `Score: ${info.score}`;
+        // A point marked before the reveal isn't added until REVEAL is
+        // pressed, so show it as pending rather than leave the host guessing.
+        const pending = !state.revealed && info.correct === true;
+        scoreLabel.textContent = pending
+          ? `Score: ${info.score} (+1 on reveal)`
+          : `Score: ${info.score}`;
         scoreLabel.style.margin = '0 6px';
         scoreDiv.appendChild(scoreLabel);
 
