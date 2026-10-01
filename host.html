@@ -323,63 +323,68 @@
       background: #ff6b81;
     }
 
-    .bigActions {
-      display: flex;
-      gap: 12px;
-      margin-top: 10px;
-    }
-
-    .bigActions button {
-      font-size: 1.1em;
-      padding: 12px 22px;
-      flex: 1;
-    }
-
     #endGameButton {
       width: 100%;
-      padding: 10px;
-      margin-top: 16px;
+      padding: 8px;
+      margin-top: 18px;
+      font-size: 0.85em;
       background: transparent;
-      color: #ffb400;
-      border: 2px solid #ffb400;
+      color: #9fb3c8;
+      border: 1px solid #4a5568;
     }
 
-    #startButton, #startRoundButton {
-      background: #ffb400;
-      color: #1a1a2e;
-      font-size: 1.2em;
-      padding: 14px;
+    /* The one button that runs the show. Its label always says exactly what
+       pressing it will do next. */
+    #stepButton {
       width: 100%;
-    }
-
-    #showAnswersButton {
+      padding: 18px 14px;
+      font-size: 1.45em;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+      border: 0;
+      border-radius: 8px;
       background: #ffb400;
-      border-color: #ffb400;
       color: #1a1a2e;
+      cursor: pointer;
     }
 
-    #showAnswersButton:disabled {
-      opacity: 0.45;
+    #stepButton.reveal { background: #e94560; color: #ffffff; }
+    #stepButton.next   { background: #2ecc71; color: #1a1a2e; }
+    #stepButton.finish { background: #ffffff; color: #1a1a2e; }
+
+    #stepButton:disabled {
+      opacity: 0.5;
       cursor: default;
     }
 
-    #revealButton {
-      background: #e94560;
-      border-color: #e94560;
+    #stepHint {
+      margin: 10px 0 6px 0;
+      color: #cbd5e0;
+      font-size: 0.95em;
+      min-height: 1.2em;
     }
 
-    #revealButton:hover {
-      background: #ff6b81;
+    #stepTrack {
+      display: flex;
+      gap: 6px;
+      font-size: 0.78em;
     }
 
-    #nextButton {
-      background: #2ecc71;
-      border-color: #2ecc71;
+    #stepTrack span {
+      flex: 1;
+      text-align: center;
+      padding: 5px 4px;
+      border-radius: 4px;
+      background: #1f2a44;
+      color: #6b7a93;
+    }
+
+    #stepTrack span.done { color: #9fb3c8; }
+
+    #stepTrack span.now {
+      background: #ffb400;
       color: #1a1a2e;
-    }
-
-    #nextButton:hover {
-      background: #58e08c;
+      font-weight: bold;
     }
 
     #loadSelectedButton {
@@ -592,9 +597,14 @@
           <button id="audioPlayButton" type="button">&#9654; PLAY CLIP</button>
           <button id="audioStopButton" type="button">&#9632; STOP</button>
         </div>
-        <button id="startButton">START GAME</button>
-        <button id="startRoundButton" style="display:none;">START ROUND</button>
-        <button id="endGameButton" style="display:none;">END GAME</button>
+        <button id="stepButton" type="button">START GAME</button>
+        <p id="stepHint"></p>
+        <div id="stepTrack">
+          <span data-step="question">1. Players answer</span>
+          <span data-step="answers">2. Answers shown, mark them</span>
+          <span data-step="revealed">3. Answer revealed</span>
+        </div>
+        <button id="endGameButton" style="display:none;">End game early</button>
       </div>
 
       <div class="card">
@@ -602,11 +612,6 @@
         <div id="playersArea"></div>
       </div>
 
-      <div class="bigActions" id="bigActions">
-        <button id="showAnswersButton">SHOW ANSWERS</button>
-        <button id="revealButton">REVEAL</button>
-        <button id="nextButton">NEXT QUESTION</button>
-      </div>
     </div>
   </div>
 
@@ -1148,10 +1153,17 @@
       const answerTextPosInputs = document.querySelectorAll('.answerTextPosInput');
 
       const questions = [];
+      const incomplete = [];
       for (let i = 0; i < qInputs.length; i++) {
         const q = qInputs[i].value.trim();
         const a = aInputs[i].value.trim();
-        if (q && a) {
+        // A picture or clip can stand in for the question text, and a picture
+        // for the answer text. A row needs something on each side.
+        const hasQuestion = q || rowImages[i].q || rowImages[i].audio;
+        const hasAnswer = a || rowImages[i].a;
+        if (hasQuestion && !hasAnswer) incomplete.push(`Q${i + 1} has no answer`);
+        if (!hasQuestion && hasAnswer) incomplete.push(`Q${i + 1} has an answer but no question`);
+        if (hasQuestion && hasAnswer) {
           questions.push({
             question: q,
             answer: a,
@@ -1164,6 +1176,11 @@
             answerTextPosition: answerTextPosInputs[i] ? answerTextPosInputs[i].value : 'bottom'
           });
         }
+      }
+
+      if (incomplete.length) {
+        alert('Not saved:\n\n' + incomplete.join('\n') + '\n\nA picture or clip can replace the question text, and a picture can replace the answer text.');
+        return;
       }
 
       if (!title || questions.length === 0) {
@@ -1341,20 +1358,6 @@
       refreshStatus();
     });
 
-    document.getElementById('startButton').addEventListener('click', async () => {
-      const response = await fetch('/api/game/start', { method: 'POST' });
-      const result = await response.json();
-      if (!result.started) {
-        alert('Load at least one round from the library before starting.');
-      }
-      refreshStatus();
-    });
-
-    document.getElementById('startRoundButton').addEventListener('click', async () => {
-      await fetch('/api/round/begin', { method: 'POST' });
-      refreshStatus();
-    });
-
     async function markPlayer(slot, value) {
       await fetch('/api/mark', {
         method: 'POST',
@@ -1421,6 +1424,66 @@
       });
     }
 
+    function renderStep(state) {
+      const btn = document.getElementById('stepButton');
+      const hint = document.getElementById('stepHint');
+      const seated = Object.values(state.players).filter(p => p.name);
+      const lockedIn = seated.filter(p => p.hasAnswered).length;
+      const phase = state.phase;
+      let label = '';
+      let cls = '';
+      let text = '';
+
+      if (phase === 'lobby') {
+        label = 'START GAME';
+        text = state.roundCount
+          ? `${state.roundCount} round(s) loaded. Press when everyone is ready.`
+          : 'Load at least one round from the library first.';
+      } else if (phase === 'roundIntro') {
+        label = `START ROUND ${state.currentRoundIndex + 1}`;
+        text = 'The round title is on screen. Press to show the first question.';
+      } else if (phase === 'question') {
+        label = `SHOW ANSWERS (${lockedIn}/${seated.length} in)`;
+        text = 'Players are answering. Press once everyone has locked in.';
+      } else if (phase === 'answers') {
+        const unmarked = unmarkedAnswers(state).length;
+        label = 'REVEAL ANSWER';
+        cls = 'reveal';
+        text = unmarked
+          ? `Mark each answer below (${unmarked} still to mark), then reveal. Points are added on reveal.`
+          : 'All marked. Press to reveal the answer and add the points.';
+      } else if (phase === 'revealed') {
+        if (state.isLastQuestion) {
+          label = 'END GAME & SHOW WINNER';
+          cls = 'finish';
+          text = 'Last question done. Check the scores, then finish.';
+        } else {
+          label = state.nextIsNewRound ? 'NEXT ROUND' : 'NEXT QUESTION';
+          cls = 'next';
+          text = 'Points added. Fix any marks below if needed, then move on.';
+        }
+      }
+
+      btn.style.display = phase === 'ended' ? 'none' : 'block';
+      btn.textContent = label;
+      btn.className = cls;
+      btn.disabled = stepBusy || (phase === 'lobby' && !state.roundCount);
+      hint.textContent = phase === 'ended' ? '' : text;
+
+      const inQuestion = ['question', 'answers', 'revealed'].includes(phase);
+      document.getElementById('stepTrack').style.display = inQuestion ? 'flex' : 'none';
+      const order = ['question', 'answers', 'revealed'];
+      document.querySelectorAll('#stepTrack span').forEach(span => {
+        const i = order.indexOf(span.dataset.step);
+        const now = order.indexOf(phase);
+        span.className = i === now ? 'now' : i < now ? 'done' : '';
+      });
+
+      document.getElementById('endGameButton').style.display =
+        ['roundIntro', 'question', 'answers'].includes(phase)
+          || (phase === 'revealed' && !state.isLastQuestion) ? 'block' : 'none';
+    }
+
     async function refreshStatus() {
       const response = await fetch('/api/state');
       const state = await response.json();
@@ -1435,13 +1498,8 @@
       document.getElementById('audioPlayButton').innerHTML =
         state.audio && state.audio.playing ? '&#8635; PLAY FROM START' : '&#9654; PLAY CLIP';
 
-      document.getElementById('startButton').style.display = state.gameStarted ? 'none' : 'block';
-      document.getElementById('endGameButton').style.display =
-        state.gameStarted && !state.gameEnded ? 'block' : 'none';
-      document.getElementById('startRoundButton').style.display =
-        (state.gameStarted && state.showRoundIntro) ? 'block' : 'none';
-      document.getElementById('bigActions').style.display =
-        (state.gameStarted && !state.showRoundIntro && state.currentQuestion) ? 'flex' : 'none';
+      currentStatus = state;
+      renderStep(state);
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
         document.getElementById('currentRoundText').textContent =
@@ -1450,10 +1508,12 @@
         document.getElementById('currentAnswerText').textContent = '';
       } else if (state.gameStarted && state.currentQuestion) {
         document.getElementById('currentRoundText').textContent = `Round: ${state.currentRoundTitle}`;
+        const cq = state.currentQuestion;
+        const media = cq.questionImage ? '(picture)' : cq.questionAudio ? '(audio clip)' : '';
         document.getElementById('currentQuestionText').textContent =
-          `Q${state.currentQuestionIndex + 1} of ${state.questionsInRound}: ${state.currentQuestion.question}`;
+          `Q${state.currentQuestionIndex + 1} of ${state.questionsInRound}: ${cq.question || media}`;
         document.getElementById('currentAnswerText').textContent =
-          `Correct answer: ${state.currentQuestion.answer}`;
+          `Correct answer: ${cq.answer || '(see answer picture)'}`;
       } else if (state.gameStarted) {
         document.getElementById('currentRoundText').textContent = 'Show finished!';
         const joined = Object.values(state.players).filter(p => p.name);
@@ -1475,16 +1535,6 @@
         document.getElementById('currentAnswerText').textContent = '';
       }
 
-      // SHOW ANSWERS: count who has locked in, and grey the button out once
-      // the answers are up or the answer is revealed.
-      const seated = Object.values(players).filter(p => p.name);
-      const lockedIn = seated.filter(p => p.hasAnswered).length;
-      const showBtn = document.getElementById('showAnswersButton');
-      showBtn.disabled = !!(state.answersShown || state.revealed);
-      showBtn.textContent = state.answersShown
-        ? 'ANSWERS SHOWN'
-        : `SHOW ANSWERS (${lockedIn}/${seated.length})`;
-      showBtn.dataset.waiting = String(seated.length - lockedIn);
 
       renderSavedRounds(state);
 
@@ -1566,28 +1616,53 @@
       refreshStatus();
     });
 
+    // --- The step button -------------------------------------------------
+    // Sends the step this page believes the game is on. The server refuses if
+    // the game has already moved on, so a double-click can't skip a step.
+    let currentStatus = null;
+    let stepBusy = false;
+
+    function unmarkedAnswers(state) {
+      return Object.values(state.players)
+        .filter(p => p.name && p.hasAnswered && p.correct !== true && p.correct !== false)
+        .map(p => p.name);
+    }
+
+    document.getElementById('stepButton').addEventListener('click', async () => {
+      const state = currentStatus;
+      if (!state || stepBusy) return;
+      const phase = state.phase;
+      const seated = Object.values(state.players).filter(p => p.name);
+
+      if (phase === 'question') {
+        const waiting = seated.filter(p => !p.hasAnswered).map(p => p.name);
+        if (waiting.length && !confirm(`Still waiting on: ${waiting.join(', ')}.\n\nShow everyone's answers anyway? Answering closes when you do.`)) return;
+      }
+      if (phase === 'answers') {
+        const unmarked = unmarkedAnswers(state);
+        if (unmarked.length && !confirm(`Not marked yet: ${unmarked.join(', ')}.\n\nReveal anyway? Anyone not marked correct gets no point (you can still mark them afterwards).`)) return;
+      }
+      if (phase === 'revealed' && state.isLastQuestion && !confirm('That was the last question. End the game and show the winner?')) return;
+
+      stepBusy = true;
+      document.getElementById('stepButton').disabled = true;
+      try {
+        const response = await fetch('/api/advance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: phase })
+        });
+        const result = await response.json();
+        if (!result.success && !result.stale && result.message) alert(result.message);
+      } finally {
+        stepBusy = false;
+        await refreshStatus();
+      }
+    });
+
     document.getElementById('endGameButton').addEventListener('click', async () => {
       if (!confirm('End the game now and show the winner on stream?')) return;
       await fetch('/api/game/end', { method: 'POST' });
-      refreshStatus();
-    });
-
-    document.getElementById('showAnswersButton').addEventListener('click', async () => {
-      const waiting = Number(document.getElementById('showAnswersButton').dataset.waiting || 0);
-      if (waiting > 0 && !confirm(`${waiting} player(s) haven't locked in yet. Show everyone's answers anyway? Answering closes when you do.`)) {
-        return;
-      }
-      await fetch('/api/answers/show', { method: 'POST' });
-      refreshStatus();
-    });
-
-    document.getElementById('revealButton').addEventListener('click', async () => {
-      await fetch('/api/reveal', { method: 'POST' });
-      refreshStatus();
-    });
-
-    document.getElementById('nextButton').addEventListener('click', async () => {
-      await fetch('/api/next', { method: 'POST' });
       refreshStatus();
     });
 

@@ -80,6 +80,7 @@
       max-width: 600px;
       margin-bottom: 25px;
       line-height: 1.25;
+      overflow-wrap: break-word;
     }
 
     #questionDisplay canvas.waveform {
@@ -507,7 +508,9 @@
         } else if (q.questionAudio) {
           html += `<canvas class="waveform" data-src="/uploads/${esc(q.questionAudio)}"></canvas>`;
         }
-        html += `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
+        html += q.question
+          ? `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`
+          : `Q${state.currentQuestionIndex + 1}`;
         if (state.revealed) {
           html += `<div class="answerLine">`;
           if (q.answerImage) {
@@ -630,6 +633,14 @@
         }
         refreshButtons();
       });
+    });
+
+    // Enter in the answer box locks the answer in, same as the button.
+    document.getElementById('answerInput').addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      const button = document.getElementById('lockButton');
+      if (!button.disabled) button.click();
     });
 
     document.getElementById('lockButton').addEventListener('click', async () => {

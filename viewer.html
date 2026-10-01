@@ -37,8 +37,11 @@
       color: #1b1b1b;
     }
 
+    /* Bangers leans to the right, so its letters overhang their own width.
+       The padding gives that overhang somewhere to go inside the box. */
     #quoteBox span {
       display: block;
+      padding: 0.08em 0.18em;
       overflow-wrap: break-word;
     }
 
@@ -217,9 +220,14 @@
       font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', sans-serif;
     }
 
+    /* Q-frame.png's opening starts about 7% in from each side, 11.6% from
+       the top and 10.3% from the bottom. Text and pictures are held inside
+       it, with a margin for text, so nothing runs under the yellow border. */
     .qTextOnly {
       position: absolute;
-      inset: 6% 5% 8% 5%;
+      inset: 14% 10% 13% 10%;
+      overflow: hidden;
+      overflow-wrap: break-word;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -234,7 +242,7 @@
        out to match where each seat sits on screen. */
     .answersGrid {
       position: absolute;
-      inset: 7% 6% 9% 6%;
+      inset: 14% 9.5% 13% 9.5%;
       display: grid;
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr;
@@ -284,10 +292,10 @@
 
     .qaImageWrap {
       position: absolute;
-      top: 6%;
-      left: 5%;
-      right: 5%;
-      bottom: 8%;
+      top: 11.6%;
+      left: 6.9%;
+      right: 7%;
+      bottom: 10.3%;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -302,17 +310,22 @@
       background: #0d1420;
     }
 
+    /* contain, not cover: the whole picture is always shown, scaled to fit,
+       with the dark background filling any spare space. */
     .qaImageWrap img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
     }
 
     .qaTextOverlay {
       position: absolute;
-      bottom: 10%;
+      bottom: 14%;
       left: 10%;
       right: 10%;
+      max-height: 40%;
+      overflow: hidden;
+      overflow-wrap: break-word;
       z-index: 2;
       background: rgba(0, 0, 0, 0.65);
       border-radius: 10px;
@@ -322,7 +335,7 @@
     }
 
     .qaTextOverlay.posTop {
-      top: 8%;
+      top: 14%;
       bottom: auto;
     }
 
@@ -531,7 +544,32 @@
       lastQuestionHtml = html;
       box.innerHTML = html;
       QuizAudio.drawAll(box);
+      fitQuestionText();
     }
+
+    // Long questions and answers are shrunk until they fit their box, rather
+    // than running past it. Starts from the size set in the stylesheet, so
+    // short text is unaffected.
+    function fitText(el) {
+      el.style.fontSize = '';
+      const start = parseFloat(getComputedStyle(el).fontSize);
+      const fits = () => el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1;
+      if (fits()) return;
+      let low = 8;
+      let high = start;
+      while (high - low > 0.5) {
+        const mid = (low + high) / 2;
+        el.style.fontSize = mid + 'px';
+        if (fits()) low = mid; else high = mid;
+      }
+      el.style.fontSize = low + 'px';
+    }
+
+    function fitQuestionText() {
+      document.querySelectorAll('#questionText .qTextOnly, #questionText .qaTextOverlay').forEach(fitText);
+    }
+
+    window.addEventListener('resize', fitQuestionText);
 
     // /viewer?noaudio is for people watching the layout; keep the clip silent
     // there as well as the camera audio. OBS uses the plain URL and needs it.
@@ -588,18 +626,20 @@
           const showingAnswerImage = state.revealed && q.answerImage;
           const questionLine = q.showText === false
             ? ''
-            : `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}`;
+            : q.question ? `Q${state.currentQuestionIndex + 1}: ${esc(q.question)}` : '';
           let textHtml;
           let position;
           if (showingAnswerImage) {
-            textHtml = q.answerShowText === false
+            textHtml = q.answerShowText === false || !q.answer
               ? ''
               : `<div class="answerLine answerOnly">${esc(q.answer)}</div>`;
             position = q.answerTextPosition;
           } else {
             textHtml = questionLine;
-            if (state.revealed) {
-              textHtml += `<div class="answerLine">${esc(q.answer)}</div>`;
+            if (state.revealed && q.answer) {
+              textHtml += questionLine
+                ? `<div class="answerLine">${esc(q.answer)}</div>`
+                : `<div class="answerLine answerOnly">${esc(q.answer)}</div>`;
             }
             position = q.textPosition;
           }
@@ -704,7 +744,7 @@
     // the box on the paper. The rectangle is inside the paper's torn edges and
     // clear of both yellow quote marks, measured on the 1672x941 image.
     const BG_SIZE = { w: 1672, h: 941 };
-    const QUOTE_AREA = { left: 1208, top: 100, right: 1460, bottom: 228 };
+    const QUOTE_AREA = { left: 1210, top: 102, right: 1450, bottom: 224 };
     let shownQuote = null;
 
     function placeQuoteBox() {

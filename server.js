@@ -374,6 +374,9 @@ function buildState(role, ownSlot) {
     // The host's feed, once the host page says its camera is publishing.
     hostStreamId: hostCamLive ? hostStreamId : null,
     joinCodeRequired: !!joinCode,
+    phase: currentPhase(),
+    isLastQuestion: isLastQuestion(),
+    nextIsNewRound: nextIsNewRound(),
     quote: currentQuote,
     showRoundIntro,
     audio: {
@@ -539,27 +542,9 @@ app.post('/api/submit', (req, res) => {
   res.json({ success: true });
 });
 
-app.post('/api/answers/show', requireHost, (req, res) => {
-  if (revealed) {
-    return res.json({ success: false, message: 'The answer is already revealed' });
-  }
-  answersShown = true;
-  res.json({ success: true });
-});
 
-app.post('/api/reveal', requireHost, (req, res) => {
-  // A second press on the same question shouldn't skip a quote, or award
-  // the points twice.
-  if (!revealed) {
-    pickQuote();
-    for (const slot in players) {
-      if (players[slot].correct === true) players[slot].score += 1;
-    }
-  }
-  revealed = true;
-  answersShown = false;
-  res.json({ success: true });
-});
+
+
 
 app.post('/api/mark', requireHost, (req, res) => {
   const { slot, value } = req.body;
@@ -668,70 +653,15 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
   res.json({ success: true, roundCount: rounds.length });
 });
 
-app.post('/api/game/start', requireHost, (req, res) => {
-  if (rounds.length > 0) {
-    gameStarted = true;
-    currentRoundIndex = 0;
-    currentQuestionIndex = 0;
-    showRoundIntro = true;
-    gameEnded = false;
-    answersShown = false;
-    stopAudio();
-  }
-  res.json({ success: true, started: gameStarted });
-});
+
 
 // Ends the show: every page drops the current question and shows the winner.
 // Scores are kept. RESET GAME or START GAME clears it.
-app.post('/api/game/end', requireHost, (req, res) => {
-  if (!gameStarted) {
-    return res.json({ success: false, message: 'The game has not started' });
-  }
-  gameEnded = true;
-  revealed = false;
-  answersShown = false;
-  showRoundIntro = false;
-  for (const slot in players) {
-    players[slot].answer = null;
-    players[slot].correct = null;
-  }
-  stopAudio();
-  res.json({ success: true });
-});
 
-app.post('/api/round/begin', requireHost, (req, res) => {
-  showRoundIntro = false;
-  answersShown = false;
-  stopAudio();
-  res.json({ success: true });
-});
 
-app.post('/api/next', requireHost, (req, res) => {
-  for (const slot in players) {
-    players[slot].answer = null;
-    players[slot].correct = null;
-  }
-  revealed = false;
-  answersShown = false;
-  stopAudio();
 
-  const currentRound = rounds[currentRoundIndex];
-  let roundChanged = false;
 
-  if (currentRound && currentQuestionIndex < currentRound.questions.length - 1) {
-    currentQuestionIndex++;
-  } else if (currentRoundIndex < rounds.length - 1) {
-    currentRoundIndex++;
-    currentQuestionIndex = 0;
-    roundChanged = true;
-  }
 
-  if (roundChanged) {
-    showRoundIntro = true;
-  }
-
-  res.json({ success: true });
-});
 
 // Sets the join code for new seats. Players already seated keep their seats;
 // the code is only checked when someone sits down. An empty code turns the
@@ -745,6 +675,173 @@ app.post('/api/host/joincode', requireHost, (req, res) => {
   }
   joinCode = code;
   res.json({ success: true, joinCode });
+});
+
+// --- Game flow --------------------------------------------------------------
+// The game moves through fixed steps. The host page drives them with a single
+// button, which calls /api/advance with the step it believes the game is on;
+// the server only moves on if that matches. A double-click, a slow
+// connection, or a second host tab can therefore never skip a step.
+//
+//   lobby -> roundIntro -> question -> answers -> revealed -> question ... -> ended
+//
+// The individual routes below are kept so nothing that still calls them
+// breaks, but they share these functions.
+
+function currentRoundAndQuestion() {
+  const round = rounds[currentRoundIndex] || null;
+  const question = round ? round.questions[currentQuestionIndex] || null : null;
+  return { round, question };
+}
+
+function currentPhase() {
+  if (!gameStarted) return 'lobby';
+  if (gameEnded) return 'ended';
+  if (showRoundIntro) return 'roundIntro';
+  if (!currentRoundAndQuestion().question) return 'ended';
+  if (revealed) return 'revealed';
+  if (answersShown) return 'answers';
+  return 'question';
+}
+
+function isLastQuestion() {
+  const { round } = currentRoundAndQuestion();
+  return !!round
+    && currentRoundIndex >= rounds.length - 1
+    && currentQuestionIndex >= round.questions.length - 1;
+}
+
+function nextIsNewRound() {
+  const { round } = currentRoundAndQuestion();
+  return !!round && currentQuestionIndex >= round.questions.length - 1 && !isLastQuestion();
+}
+
+function clearAnswers() {
+  for (const slot in players) {
+    players[slot].answer = null;
+    players[slot].correct = null;
+  }
+}
+
+function startGame() {
+  if (rounds.length === 0) return false;
+  gameStarted = true;
+  gameEnded = false;
+  currentRoundIndex = 0;
+  currentQuestionIndex = 0;
+  showRoundIntro = true;
+  revealed = false;
+  answersShown = false;
+  clearAnswers();
+  stopAudio();
+  return true;
+}
+
+function beginRound() {
+  showRoundIntro = false;
+  answersShown = false;
+  stopAudio();
+}
+
+function showAnswers() {
+  if (revealed) return false;
+  answersShown = true;
+  return true;
+}
+
+function revealAnswer() {
+  // A second press on the same question shouldn't skip a quote, or award
+  // the points twice.
+  if (!revealed) {
+    pickQuote();
+    for (const slot in players) {
+      if (players[slot].correct === true) players[slot].score += 1;
+    }
+  }
+  revealed = true;
+  answersShown = false;
+}
+
+function nextQuestion() {
+  clearAnswers();
+  revealed = false;
+  answersShown = false;
+  stopAudio();
+  const { round } = currentRoundAndQuestion();
+  if (round && currentQuestionIndex < round.questions.length - 1) {
+    currentQuestionIndex++;
+  } else if (currentRoundIndex < rounds.length - 1) {
+    currentRoundIndex++;
+    currentQuestionIndex = 0;
+    showRoundIntro = true;
+  }
+}
+
+function endGame() {
+  if (!gameStarted) return false;
+  gameEnded = true;
+  revealed = false;
+  answersShown = false;
+  showRoundIntro = false;
+  clearAnswers();
+  stopAudio();
+  return true;
+}
+
+app.post('/api/advance', requireHost, (req, res) => {
+  const phase = currentPhase();
+  if (req.body.from !== phase) {
+    return res.status(409).json({ success: false, stale: true, phase });
+  }
+  switch (phase) {
+    case 'lobby':
+      if (!startGame()) {
+        return res.json({ success: false, message: 'Load at least one round from the library before starting.' });
+      }
+      break;
+    case 'roundIntro': beginRound(); break;
+    case 'question': showAnswers(); break;
+    case 'answers': revealAnswer(); break;
+    case 'revealed':
+      if (isLastQuestion()) endGame(); else nextQuestion();
+      break;
+    default:
+      return res.json({ success: false, message: 'The game is over. Press RESET GAME to start again.' });
+  }
+  res.json({ success: true, phase: currentPhase() });
+});
+
+app.post('/api/game/start', requireHost, (req, res) => {
+  res.json({ success: true, started: startGame() && gameStarted });
+});
+
+app.post('/api/round/begin', requireHost, (req, res) => {
+  beginRound();
+  res.json({ success: true });
+});
+
+app.post('/api/answers/show', requireHost, (req, res) => {
+  if (!showAnswers()) {
+    return res.json({ success: false, message: 'The answer is already revealed' });
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/reveal', requireHost, (req, res) => {
+  revealAnswer();
+  res.json({ success: true });
+});
+
+app.post('/api/next', requireHost, (req, res) => {
+  nextQuestion();
+  res.json({ success: true });
+});
+
+app.post('/api/game/end', requireHost, (req, res) => {
+  if (!endGame()) {
+    return res.json({ success: false, message: 'The game has not started' });
+  }
+  res.json({ success: true });
 });
 
 app.post('/api/host/name', requireHost, (req, res) => {
