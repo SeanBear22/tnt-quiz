@@ -150,7 +150,7 @@ app.use(express.json());
 // Only files the pages actually use are served from the app folder: images at
 // the top level and the three browser scripts. Serving the whole folder
 // exposed the git repo, the server source, the seed question bank and more.
-const PUBLIC_SCRIPTS = new Set(['cam-config.js', 'cam-local.js', 'quiz-audio.js']);
+const PUBLIC_SCRIPTS = new Set(['cam-config.js', 'cam-local.js', 'quiz-audio.js', 'buzzer.js']);
 const PUBLIC_IMAGE = /^[\w.-]+\.(png|jpe?g|gif|webp|svg|ico)$/i;
 
 app.use((req, res, next) => {
@@ -195,6 +195,16 @@ const ALLOWED_AUDIO_TYPES = /^audio\/(mpeg|mp3|wav|x-wav|wave|vnd\.wave|ogg|webm
 const audioUpload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    cb(null, ALLOWED_AUDIO_TYPES.test(file.mimetype));
+  }
+});
+
+// Custom buzzer sounds. Kept small: a buzz should be a second or two, not a
+// song, and every page downloads every seat's sound ahead of time.
+const buzzerUpload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
     cb(null, ALLOWED_AUDIO_TYPES.test(file.mimetype));
   }
@@ -255,6 +265,71 @@ let showRoundIntro = false;
 // withheld from every page, which is what makes them show the winner.
 let gameEnded = false;
 let bankedRounds = [];
+
+// --- Buzzers ----------------------------------------------------------------
+// A round marked as a buzzer round has no typed answers. The buzzers are open
+// for the whole question. The first buzz the server receives wins and every
+// other buzz is refused until the host judges it. A wrong answer locks that
+// player out for the rest of the question, until everyone else has also been
+// locked out, at which point the lockouts clear and everyone can go again.
+//
+// buzzId goes up on every successful buzz, so a page can tell a new buzz from
+// one it has already played the sound for. version goes up on any change.
+let buzz = null;
+buzz = freshBuzz();
+
+function freshBuzz() {
+  return {
+    holder: null,
+    lockedOut: [],
+    buzzId: buzz ? buzz.buzzId : 0,
+    version: buzz ? buzz.version + 1 : 0,
+    at: null,
+    // Buzzes that arrived after the winner's, for the host only: who, and how
+    // many milliseconds behind. Settles "I pressed it first!" arguments.
+    runnersUp: []
+  };
+}
+
+function resetBuzz() {
+  buzz = freshBuzz();
+}
+
+// Per-seat custom sounds, saved with the other settings so a restart keeps
+// them. A missing entry means the built-in buzzer.
+let buzzerSounds = Object.assign(
+  { player1: null, player2: null, player3: null, player4: null },
+  savedSettings.buzzerSounds || {}
+);
+
+function isBuzzerRound(round) {
+  return !!(round && round.buzzer);
+}
+
+function buzzerPoints(round) {
+  const points = Number(round && round.buzzerPoints);
+  return Number.isInteger(points) && points >= 1 && points <= 100 ? points : 1;
+}
+
+function buzzersOpen() {
+  return currentPhase() === 'question' && isBuzzerRound(currentRoundAndQuestion().round);
+}
+
+function projectBuzz(isHost) {
+  const { round } = currentRoundAndQuestion();
+  const out = {
+    round: gameStarted && !gameEnded && isBuzzerRound(round),
+    open: buzzersOpen(),
+    points: buzzerPoints(round),
+    holder: buzz.holder,
+    lockedOut: buzz.lockedOut.slice(),
+    buzzId: buzz.buzzId,
+    version: buzz.version,
+    at: buzz.at
+  };
+  if (isHost) out.runnersUp = buzz.runnersUp.slice();
+  return out;
+}
 
 function loadBank() {
   try {
@@ -378,6 +453,8 @@ function buildState(role, ownSlot) {
     isLastQuestion: isLastQuestion(),
     nextIsNewRound: nextIsNewRound(),
     quote: currentQuote,
+    buzz: projectBuzz(isHost),
+    buzzerSounds,
     showRoundIntro,
     audio: {
       playing: audioPlaying,
@@ -538,6 +615,9 @@ app.post('/api/submit', (req, res) => {
   if (revealed || answersShown) {
     return res.status(409).json({ success: false, message: 'Answers are closed' });
   }
+  if (isBuzzerRound(currentRoundAndQuestion().round)) {
+    return res.status(409).json({ success: false, message: 'This is a buzzer round' });
+  }
   players[slot].answer = typeof answer === 'string' ? answer.slice(0, 500) : '';
   res.json({ success: true });
 });
@@ -579,6 +659,12 @@ app.post('/api/release', requireHost, (req, res) => {
   const { slot } = req.body;
   if (players[slot]) {
     players[slot] = emptyPlayer();
+    buzz.lockedOut = buzz.lockedOut.filter(s => s !== slot);
+    if (buzz.holder === slot) {
+      buzz.holder = null;
+      buzz.at = null;
+    }
+    buzz.version++;
   }
   res.json({ success: true });
 });
@@ -599,6 +685,7 @@ app.post('/api/game/reset', requireHost, (req, res) => {
   gameEnded = false;
   answersShown = false;
   stopAudio();
+  resetBuzz();
   res.json({ success: true });
 });
 
@@ -606,11 +693,20 @@ app.get('/api/bank', requireHost, (req, res) => {
   res.json({ bankedRounds });
 });
 
+// The buzzer settings for a round, cleaned up. Rounds saved before buzzers
+// existed have neither field and stay normal rounds.
+function roundSettings(body) {
+  return {
+    buzzer: body.buzzer === true,
+    buzzerPoints: buzzerPoints({ buzzerPoints: body.buzzerPoints })
+  };
+}
+
 app.post('/api/bank/add', requireHost, (req, res) => {
   const { title, questions } = req.body;
   if (title && Array.isArray(questions) && questions.length > 0) {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    bankedRounds.push({ id, title, questions });
+    bankedRounds.push(Object.assign({ id, title, questions }, roundSettings(req.body)));
     saveBank();
   }
   res.json({ success: true, bankedRounds });
@@ -622,6 +718,7 @@ app.post('/api/bank/edit', requireHost, (req, res) => {
   if (round) {
     round.title = title;
     round.questions = questions;
+    Object.assign(round, roundSettings(req.body));
     saveBank();
   }
   res.json({ success: true, bankedRounds });
@@ -640,7 +737,12 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
     rounds = ids
       .map(id => bankedRounds.find(r => r.id === id))
       .filter(r => r)
-      .map(r => ({ title: r.title, questions: r.questions }));
+      .map(r => ({
+        title: r.title,
+        questions: r.questions,
+        buzzer: isBuzzerRound(r),
+        buzzerPoints: buzzerPoints(r)
+      }));
     gameStarted = false;
     currentRoundIndex = 0;
     currentQuestionIndex = 0;
@@ -649,6 +751,7 @@ app.post('/api/rounds/select', requireHost, (req, res) => {
     gameEnded = false;
     answersShown = false;
     stopAudio();
+    resetBuzz();
   }
   res.json({ success: true, roundCount: rounds.length });
 });
@@ -734,6 +837,7 @@ function startGame() {
   answersShown = false;
   clearAnswers();
   stopAudio();
+  resetBuzz();
   return true;
 }
 
@@ -741,6 +845,7 @@ function beginRound() {
   showRoundIntro = false;
   answersShown = false;
   stopAudio();
+  resetBuzz();
 }
 
 function showAnswers() {
@@ -752,14 +857,21 @@ function showAnswers() {
 function revealAnswer() {
   // A second press on the same question shouldn't skip a quote, or award
   // the points twice.
+  // In a buzzer round the points were already given when the host judged
+  // the buzz, so nothing is added here.
   if (!revealed) {
     pickQuote();
-    for (const slot in players) {
-      if (players[slot].correct === true) players[slot].score += 1;
+    if (!isBuzzerRound(currentRoundAndQuestion().round)) {
+      for (const slot in players) {
+        if (players[slot].correct === true) players[slot].score += 1;
+      }
     }
   }
   revealed = true;
   answersShown = false;
+  // Buzzers are closed now. Keep the holder so the frame stays lit, but a
+  // player still waiting to be judged is no longer.
+  buzz.version++;
 }
 
 function nextQuestion() {
@@ -767,6 +879,7 @@ function nextQuestion() {
   revealed = false;
   answersShown = false;
   stopAudio();
+  resetBuzz();
   const { round } = currentRoundAndQuestion();
   if (round && currentQuestionIndex < round.questions.length - 1) {
     currentQuestionIndex++;
@@ -785,6 +898,7 @@ function endGame() {
   showRoundIntro = false;
   clearAnswers();
   stopAudio();
+  resetBuzz();
   return true;
 }
 
@@ -800,7 +914,12 @@ app.post('/api/advance', requireHost, (req, res) => {
       }
       break;
     case 'roundIntro': beginRound(); break;
-    case 'question': showAnswers(); break;
+    // A buzzer round has no typed answers to show, so the step after the
+    // question is the reveal. Pressed without a correct buzz, nobody scores.
+    case 'question':
+      if (isBuzzerRound(currentRoundAndQuestion().round)) revealAnswer();
+      else showAnswers();
+      break;
     case 'answers': revealAnswer(); break;
     case 'revealed':
       if (isLastQuestion()) endGame(); else nextQuestion();
@@ -840,6 +959,126 @@ app.post('/api/next', requireHost, (req, res) => {
 app.post('/api/game/end', requireHost, (req, res) => {
   if (!endGame()) {
     return res.json({ success: false, message: 'The game has not started' });
+  }
+  res.json({ success: true });
+});
+
+// --- Buzzer endpoints -------------------------------------------------------
+
+app.post('/api/buzz', requirePlayer, (req, res) => {
+  const slot = req.playerSlot;
+  if (!buzzersOpen()) {
+    return res.json({ success: false, reason: 'closed', buzz: projectBuzz(false) });
+  }
+  if (buzz.lockedOut.includes(slot)) {
+    return res.json({ success: false, reason: 'locked', buzz: projectBuzz(false) });
+  }
+  if (buzz.holder) {
+    if (buzz.holder !== slot && !buzz.runnersUp.some(r => r.slot === slot)) {
+      buzz.runnersUp.push({ slot, behindMs: Date.now() - buzz.at });
+      buzz.version++;
+    }
+    return res.json({
+      success: buzz.holder === slot,
+      reason: buzz.holder === slot ? 'first' : 'late',
+      holder: buzz.holder,
+      buzz: projectBuzz(false)
+    });
+  }
+  buzz.holder = slot;
+  buzz.at = Date.now();
+  buzz.runnersUp = [];
+  buzz.buzzId++;
+  buzz.version++;
+  res.json({ success: true, reason: 'first', holder: slot, buzz: projectBuzz(false) });
+});
+
+// The host's verdict on the player holding the buzz. The page sends the slot
+// it is judging, so a double-click can never land on whoever buzzes next.
+app.post('/api/buzz/judge', requireHost, (req, res) => {
+  const { slot, correct } = req.body;
+  if (!buzz.holder || slot !== buzz.holder || !buzzersOpen()) {
+    return res.status(409).json({ success: false, stale: true, message: 'That buzz has already been dealt with' });
+  }
+  const player = players[slot];
+  if (correct === true) {
+    player.score += buzzerPoints(currentRoundAndQuestion().round);
+    player.correct = true;
+    revealAnswer();
+  } else {
+    player.correct = false;
+    buzz.lockedOut.push(slot);
+    buzz.holder = null;
+    buzz.at = null;
+    buzz.runnersUp = [];
+    // Once every seated player has had a go and got it wrong, everyone is
+    // let back in.
+    const seated = Object.keys(players).filter(s => players[s].name !== null);
+    if (seated.every(s => buzz.lockedOut.includes(s))) buzz.lockedOut = [];
+    buzz.version++;
+  }
+  res.json({ success: true, buzz: projectBuzz(true) });
+});
+
+// Drops the current buzz with no penalty: for an accidental press, or to let
+// the host read the rest of the question.
+app.post('/api/buzz/cancel', requireHost, (req, res) => {
+  buzz.holder = null;
+  buzz.at = null;
+  buzz.runnersUp = [];
+  buzz.version++;
+  res.json({ success: true });
+});
+
+// Polled several times a second during buzzer rounds, so it stays tiny.
+app.get('/api/buzz', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (safeEqual(req.get('X-Host-Secret'), HOST_SECRET)) {
+    return res.json(projectBuzz(true));
+  }
+  if (req.query.viewer && VIEWER_DELAY_SECONDS > 0) {
+    return res.json(viewerState().buzz);
+  }
+  res.json(projectBuzz(false));
+});
+
+app.post('/api/buzzer/sound', requireHost, (req, res) => {
+  buzzerUpload.single('audio')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Buzzer sound is too large (1MB maximum, keep it to a second or two)'
+        : 'Upload failed';
+      return res.status(400).json({ success: false, message });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only MP3, WAV, OGG, M4A, AAC, WebM and FLAC audio is accepted'
+      });
+    }
+    const slot = req.body.slot;
+    if (!Object.prototype.hasOwnProperty.call(buzzerSounds, slot)) {
+      return res.status(400).json({ success: false, message: 'No such seat' });
+    }
+    buzzerSounds[slot] = req.file.filename;
+    try {
+      saveSettings(Object.assign(loadSettings(), { buzzerSounds }));
+    } catch (saveErr) {
+      console.warn('Could not save buzzer sounds: ' + saveErr.message);
+    }
+    res.json({ success: true, filename: req.file.filename });
+  });
+});
+
+app.post('/api/buzzer/sound/clear', requireHost, (req, res) => {
+  const { slot } = req.body;
+  if (Object.prototype.hasOwnProperty.call(buzzerSounds, slot)) {
+    buzzerSounds[slot] = null;
+    try {
+      saveSettings(Object.assign(loadSettings(), { buzzerSounds }));
+    } catch (err) {
+      console.warn('Could not save buzzer sounds: ' + err.message);
+    }
   }
   res.json({ success: true });
 });

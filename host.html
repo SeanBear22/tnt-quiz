@@ -336,6 +336,8 @@
     /* The one button that runs the show. Its label always says exactly what
        pressing it will do next. */
     #stepButton {
+      position: relative;
+      z-index: 60;
       width: 100%;
       padding: 18px 14px;
       font-size: 1.45em;
@@ -356,6 +358,102 @@
       opacity: 0.5;
       cursor: default;
     }
+
+    /* --- Buzzer rounds -------------------------------------------------- */
+    .buzzerSettings {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 14px;
+      margin: 8px 0 4px 0;
+      padding: 8px 10px;
+      background: #1f2a44;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    .buzzerSettings label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .buzzerSettings input[type=number] { width: 64px; margin: 0; }
+    .buzzerSettings .hint { flex-basis: 100%; margin: 0; }
+
+    .buzzTag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #ffd400;
+      color: #1a1a2e;
+      font-size: 0.75em;
+      font-weight: bold;
+      vertical-align: middle;
+    }
+
+    /* Drawn above the pinned camera panel (z-index 50): when the page is
+       scrolled, the judging buttons must never end up underneath it. */
+    #buzzPanel {
+      position: relative;
+      z-index: 60;
+      display: none;
+      margin: 10px 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: #1f2a44;
+      border: 2px solid #4a5568;
+    }
+
+    /* Yellow, not red or green, for anything that matters here: it reads the
+       same whatever kind of colour vision you have. */
+    #buzzPanel.held {
+      border-color: #ffd400;
+      box-shadow: 0 0 14px rgba(255, 212, 0, 0.45);
+    }
+
+    #buzzHeadline {
+      font-size: 1.35em;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    #buzzPanel.held #buzzHeadline { color: #ffd400; }
+
+    #buzzJudge {
+      display: none;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    #buzzJudge button {
+      flex: 1;
+      margin: 0;
+      padding: 14px 8px;
+      font-size: 1.2em;
+      font-weight: bold;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #buzzCorrectBtn { background: #2b6cff; color: #ffffff; }
+    #buzzWrongBtn { background: #ffffff; color: #1a1a2e; }
+
+    #buzzDetail { color: #cbd5e0; font-size: 0.9em; }
+    #buzzCancelBtn { margin-top: 6px; }
+
+    .soundRow {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #2d3a55;
+    }
+
+    .soundRow:last-child { border-bottom: 0; }
+    .soundRow .who { font-weight: bold; }
+    .soundRow .which { color: #9fb3c8; font-size: 0.85em; }
+    .soundRow .controls { display: flex; flex-wrap: wrap; gap: 6px; grid-column: 1 / -1; align-items: center; }
+    .soundRow .controls button { margin: 0; }
+    .soundRow input[type=file] { max-width: 220px; font-size: 0.85em; }
 
     #stepHint {
       margin: 10px 0 6px 0;
@@ -567,6 +665,11 @@
       <div class="card">
         <h2 id="formHeading">Add Round to Library</h2>
         <input type="text" id="roundTitle" autocomplete="off" placeholder="Round title (e.g. 'Sci-Fi Movies')">
+        <div class="buzzerSettings">
+          <label><input type="checkbox" id="buzzerRoundInput"> Buzzer round</label>
+          <label>Points per correct buzz <input type="number" id="buzzerPointsInput" min="1" max="100" step="1" value="1" disabled></label>
+          <div class="hint">Players buzz in and answer out loud instead of typing. You judge each buzz with CORRECT or WRONG.</div>
+        </div>
 
         <div id="qaRows"></div>
 
@@ -597,6 +700,15 @@
           <button id="audioPlayButton" type="button">&#9654; PLAY CLIP</button>
           <button id="audioStopButton" type="button">&#9632; STOP</button>
         </div>
+        <div id="buzzPanel">
+          <div id="buzzHeadline"></div>
+          <div id="buzzJudge">
+            <button id="buzzCorrectBtn" type="button">&#10003; CORRECT</button>
+            <button id="buzzWrongBtn" type="button">&#10007; WRONG</button>
+          </div>
+          <div id="buzzDetail"></div>
+          <button id="buzzCancelBtn" class="smallBtn" type="button" style="display:none;">Cancel this buzz (no penalty)</button>
+        </div>
         <button id="stepButton" type="button">START GAME</button>
         <p id="stepHint"></p>
         <div id="stepTrack">
@@ -612,12 +724,22 @@
         <div id="playersArea"></div>
       </div>
 
+      <div class="card">
+        <h2>Buzzer Sounds</h2>
+        <div class="hint">Each seat keeps its sound until you change it, including after a reset. MP3, WAV, OGG or M4A, 1MB max. Anything over 4 seconds is cut off.</div>
+        <label style="display:flex; align-items:center; gap:6px; margin:8px 0;">
+          <input type="checkbox" id="hearBuzzesInput" checked> Play buzzes on this page
+        </label>
+        <div id="soundsArea"></div>
+      </div>
+
     </div>
   </div>
 
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
   <script src="quiz-audio.js"></script>
+  <script src="buzzer.js"></script>
   <script>
     // Every /api/ call from this page carries the host secret. It is kept in
     // sessionStorage so it is entered once per browser session and never
@@ -1116,8 +1238,21 @@
       });
     });
 
+    const buzzerRoundInput = document.getElementById('buzzerRoundInput');
+    const buzzerPointsInput = document.getElementById('buzzerPointsInput');
+    buzzerRoundInput.addEventListener('change', () => {
+      buzzerPointsInput.disabled = !buzzerRoundInput.checked;
+    });
+
+    function setBuzzerForm(on, points) {
+      buzzerRoundInput.checked = !!on;
+      buzzerPointsInput.value = points || 1;
+      buzzerPointsInput.disabled = !on;
+    }
+
     function clearForm() {
       document.getElementById('roundTitle').value = '';
+      setBuzzerForm(false, 1);
       document.querySelectorAll('.qInput').forEach(i => i.value = '');
       document.querySelectorAll('.aInput').forEach(i => i.value = '');
       document.querySelectorAll('.showTextInput').forEach(i => i.checked = true);
@@ -1188,17 +1323,20 @@
         return;
       }
 
+      const buzzer = buzzerRoundInput.checked;
+      const buzzerPoints = Math.min(100, Math.max(1, Math.round(Number(buzzerPointsInput.value) || 1)));
+
       if (editingId) {
         await fetch('/api/bank/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editingId, title, questions })
+          body: JSON.stringify({ id: editingId, title, questions, buzzer, buzzerPoints })
         });
       } else {
         await fetch('/api/bank/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, questions })
+          body: JSON.stringify({ title, questions, buzzer, buzzerPoints })
         });
       }
 
@@ -1216,6 +1354,7 @@
       document.getElementById('cancelEditButton').style.display = 'block';
 
       document.getElementById('roundTitle').value = round.title;
+      setBuzzerForm(round.buzzer, round.buzzerPoints);
       const qInputs = document.querySelectorAll('.qInput');
       const aInputs = document.querySelectorAll('.aInput');
 
@@ -1296,6 +1435,7 @@
         const titleLabel = document.createElement('span');
         titleLabel.className = 'roundTitleLabel';
         titleLabel.textContent = round.title;
+        if (round.buzzer) titleLabel.insertAdjacentHTML('beforeend', buzzTagHtml(round));
 
         const questionsDiv = document.createElement('div');
         questionsDiv.className = 'roundQuestions';
@@ -1386,6 +1526,11 @@
       refreshStatus();
     }
 
+    function buzzTagHtml(round) {
+      const points = round.buzzerPoints || 1;
+      return `<span class="buzzTag">BUZZER &middot; ${points} pt${points === 1 ? '' : 's'}</span>`;
+    }
+
     function renderSavedRounds(state) {
       const area = document.getElementById('savedRoundsArea');
       area.innerHTML = '';
@@ -1404,7 +1549,7 @@
 
         const header = document.createElement('div');
         header.className = 'roundHeader';
-        header.innerHTML = `<span>Round ${index + 1}: ${esc(round.title)}</span><span>▾</span>`;
+        header.innerHTML = `<span>Round ${index + 1}: ${esc(round.title)}${round.buzzer ? buzzTagHtml(round) : ''}</span><span>▾</span>`;
 
         const questionsDiv = document.createElement('div');
         questionsDiv.className = 'roundQuestions';
@@ -1430,6 +1575,7 @@
       const seated = Object.values(state.players).filter(p => p.name);
       const lockedIn = seated.filter(p => p.hasAnswered).length;
       const phase = state.phase;
+      const buzzerRound = !!(state.buzz && state.buzz.round);
       let label = '';
       let cls = '';
       let text = '';
@@ -1442,6 +1588,10 @@
       } else if (phase === 'roundIntro') {
         label = `START ROUND ${state.currentRoundIndex + 1}`;
         text = 'The round title is on screen. Press to show the first question.';
+      } else if (phase === 'question' && buzzerRound) {
+        label = 'REVEAL ANSWER (no points)';
+        cls = 'reveal';
+        text = 'Buzzers are open. Judge each buzz with CORRECT or WRONG above. A correct buzz reveals the answer by itself; press this only if nobody gets it.';
       } else if (phase === 'question') {
         label = `SHOW ANSWERS (${lockedIn}/${seated.length} in)`;
         text = 'Players are answering. Press once everyone has locked in.';
@@ -1471,7 +1621,7 @@
       hint.textContent = phase === 'ended' ? '' : text;
 
       const inQuestion = ['question', 'answers', 'revealed'].includes(phase);
-      document.getElementById('stepTrack').style.display = inQuestion ? 'flex' : 'none';
+      document.getElementById('stepTrack').style.display = inQuestion && !buzzerRound ? 'flex' : 'none';
       const order = ['question', 'answers', 'revealed'];
       document.querySelectorAll('#stepTrack span').forEach(span => {
         const i = order.indexOf(span.dataset.step);
@@ -1499,6 +1649,10 @@
         state.audio && state.audio.playing ? '&#8635; PLAY FROM START' : '&#9654; PLAY CLIP';
 
       currentStatus = state;
+      TNTBuzzer.setSounds(state.buzzerSounds);
+      buzzWatch.feed(state.buzz);
+      renderBuzz();
+      renderSounds(state);
       renderStep(state);
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
@@ -1544,14 +1698,17 @@
       for (const slot in players) {
         const info = players[slot];
         const name = info.name ? info.name : '(no player yet)';
-        const answerText = info.answer ? info.answer : '(no answer yet)';
+        const buzzerRound = !!(state.buzz && state.buzz.round);
+        const answerText = buzzerRound
+          ? (info.correct === true ? 'got it' : info.correct === false ? 'buzzed wrong' : '')
+          : info.answer ? info.answer : '(no answer yet)';
 
         const row = document.createElement('div');
         row.className = 'playerRow';
 
         const infoDiv = document.createElement('div');
         infoDiv.className = 'info';
-        infoDiv.innerHTML = `<span class="name">${esc(name)}</span> — ${esc(answerText)}`;
+        infoDiv.innerHTML = `<span class="name">${esc(name)}</span>${answerText ? ' — ' + esc(answerText) : ''}`;
         row.appendChild(infoDiv);
 
         const scoreDiv = document.createElement('div');
@@ -1585,7 +1742,7 @@
         correctBtn.addEventListener('click', () => {
           markPlayer(slot, info.correct === true ? null : true);
         });
-        row.appendChild(correctBtn);
+        if (!buzzerRound) row.appendChild(correctBtn);
 
         const incorrectBtn = document.createElement('button');
         incorrectBtn.textContent = info.correct === false ? '❌ Incorrect (undo)' : 'Mark Incorrect';
@@ -1593,7 +1750,7 @@
         incorrectBtn.addEventListener('click', () => {
           markPlayer(slot, info.correct === false ? null : false);
         });
-        row.appendChild(incorrectBtn);
+        if (!buzzerRound) row.appendChild(incorrectBtn);
 
         const releaseBtn = document.createElement('button');
         releaseBtn.textContent = 'Release Slot';
@@ -1634,7 +1791,11 @@
       const phase = state.phase;
       const seated = Object.values(state.players).filter(p => p.name);
 
-      if (phase === 'question') {
+      const buzzNow = buzzWatch.latest || state.buzz;
+      if (phase === 'question' && buzzNow && buzzNow.round) {
+        const holder = buzzNow.holder && state.players[buzzNow.holder];
+        if (holder && !confirm(`${holder.name} has buzzed and you haven't judged it yet.\n\nReveal the answer with no points?`)) return;
+      } else if (phase === 'question') {
         const waiting = seated.filter(p => !p.hasAnswered).map(p => p.name);
         if (waiting.length && !confirm(`Still waiting on: ${waiting.join(', ')}.\n\nShow everyone's answers anyway? Answering closes when you do.`)) return;
       }
@@ -1665,6 +1826,175 @@
       await fetch('/api/game/end', { method: 'POST' });
       refreshStatus();
     });
+
+    // --- Buzzers ----------------------------------------------------------
+    const HEAR_KEY = 'tntHostHearBuzzes';
+    const hearInput = document.getElementById('hearBuzzesInput');
+    try { hearInput.checked = localStorage.getItem(HEAR_KEY) !== 'off'; } catch (e) {}
+    hearInput.addEventListener('change', () => {
+      try { localStorage.setItem(HEAR_KEY, hearInput.checked ? 'on' : 'off'); } catch (e) {}
+    });
+
+    const buzzWatch = TNTBuzzer.createWatcher({
+      sound: false,
+      onBuzz: buzz => {
+        if (hearInput.checked && buzz.holder) TNTBuzzer.play(buzz.holder);
+      },
+      onChange: () => {
+        renderBuzz();
+        if (currentStatus) renderStep(currentStatus);
+      }
+    });
+
+    function playerName(slot) {
+      const p = currentStatus && currentStatus.players[slot];
+      return (p && p.name) || slot.replace('player', 'Player ');
+    }
+
+    let judgeBusy = false;
+
+    function renderBuzz() {
+      const state = currentStatus;
+      const buzz = buzzWatch.latest;
+      const panel = document.getElementById('buzzPanel');
+      const show = !!(state && buzz && buzz.round && ['question', 'revealed'].includes(state.phase));
+      panel.style.display = show ? 'block' : 'none';
+      if (!show) return;
+
+      const headline = document.getElementById('buzzHeadline');
+      const judge = document.getElementById('buzzJudge');
+      const detail = document.getElementById('buzzDetail');
+      const cancel = document.getElementById('buzzCancelBtn');
+      const holding = buzz.open && buzz.holder;
+
+      panel.classList.toggle('held', !!holding);
+      judge.style.display = holding ? 'flex' : 'none';
+      cancel.style.display = holding ? 'inline-block' : 'none';
+      document.getElementById('buzzCorrectBtn').innerHTML = `&#10003; CORRECT (+${buzz.points})`;
+      document.getElementById('buzzCorrectBtn').disabled = judgeBusy;
+      document.getElementById('buzzWrongBtn').disabled = judgeBusy;
+
+      const lines = [];
+      if (state.phase === 'revealed') {
+        const winner = buzz.holder && state.players[buzz.holder] && state.players[buzz.holder].correct === true;
+        headline.textContent = winner ? `${playerName(buzz.holder)} got it (+${buzz.points})` : 'Nobody got it';
+      } else if (holding) {
+        headline.textContent = `\u{1F514} ${playerName(buzz.holder).toUpperCase()} BUZZED`;
+        lines.push('Let them answer, then judge it.');
+        if (buzz.runnersUp && buzz.runnersUp.length) {
+          lines.push('Also pressed: ' + buzz.runnersUp
+            .map(r => `${esc(playerName(r.slot))} (+${(r.behindMs / 1000).toFixed(2)}s)`).join(', '));
+        }
+      } else {
+        headline.textContent = 'Buzzers open. Waiting for a buzz…';
+      }
+      if (buzz.open && buzz.lockedOut.length) {
+        lines.push('Locked out for this question: ' + buzz.lockedOut.map(s => esc(playerName(s))).join(', '));
+      }
+      detail.innerHTML = lines.map(l => `<div>${l.startsWith('Let') ? esc(l) : l}</div>`).join('');
+    }
+
+    async function judgeBuzz(correct) {
+      const buzz = buzzWatch.latest;
+      if (!buzz || !buzz.holder || judgeBusy) return;
+      judgeBusy = true;
+      renderBuzz();
+      try {
+        const response = await fetch('/api/buzz/judge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slot: buzz.holder, correct })
+        });
+        const result = await response.json();
+        if (result.buzz) buzzWatch.feed(result.buzz);
+      } finally {
+        judgeBusy = false;
+        await refreshStatus();
+      }
+    }
+
+    document.getElementById('buzzCorrectBtn').addEventListener('click', () => judgeBuzz(true));
+    document.getElementById('buzzWrongBtn').addEventListener('click', () => judgeBuzz(false));
+    document.getElementById('buzzCancelBtn').addEventListener('click', async () => {
+      await fetch('/api/buzz/cancel', { method: 'POST' });
+      refreshStatus();
+    });
+
+    // The sound rows are built once and only their text is updated, so a
+    // file picker isn't wiped by the once-a-second refresh.
+    const SEATS = ['player1', 'player2', 'player3', 'player4'];
+    let soundRowsBuilt = false;
+
+    function buildSoundRows() {
+      const area = document.getElementById('soundsArea');
+      SEATS.forEach((slot, i) => {
+        const row = document.createElement('div');
+        row.className = 'soundRow';
+        row.innerHTML = `
+          <span class="who" data-who></span>
+          <span class="which" data-which></span>
+          <div class="controls">
+            <button type="button" class="smallBtn" data-play>&#9654; Play</button>
+            <input type="file" accept="audio/*" data-file>
+            <button type="button" class="smallBtn" data-reset>Use default buzzer</button>
+          </div>`;
+        row.querySelector('[data-play]').addEventListener('click', () => {
+          TNTBuzzer.play(slot);
+        });
+        row.querySelector('[data-reset]').addEventListener('click', async () => {
+          await fetch('/api/buzzer/sound/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slot })
+          });
+          refreshStatus();
+        });
+        const fileInput = row.querySelector('[data-file]');
+        fileInput.addEventListener('change', async () => {
+          const file = fileInput.files[0];
+          if (!file) return;
+          if (file.size > 1024 * 1024) {
+            alert('That file is over 1MB. Trim it to a second or two and try again.');
+            fileInput.value = '';
+            return;
+          }
+          let seconds = null;
+          try { seconds = await TNTBuzzer.previewFile(file); } catch (e) {}
+          if (seconds === null) {
+            alert("That file couldn't be played. Try an MP3 or WAV.");
+            fileInput.value = '';
+            return;
+          }
+          if (seconds > 4.05 && !confirm(`That sound is ${seconds.toFixed(1)} seconds long. Only the first 4 seconds will play.\n\nUse it anyway?`)) {
+            fileInput.value = '';
+            return;
+          }
+          const form = new FormData();
+          form.append('slot', slot);
+          form.append('audio', file);
+          const response = await fetch('/api/buzzer/sound', { method: 'POST', body: form });
+          const result = await response.json().catch(() => ({}));
+          if (!result.success) alert(result.message || 'Upload failed');
+          fileInput.value = '';
+          refreshStatus();
+        });
+        area.appendChild(row);
+      });
+      soundRowsBuilt = true;
+    }
+
+    function renderSounds(state) {
+      if (!soundRowsBuilt) buildSoundRows();
+      const rows = document.querySelectorAll('#soundsArea .soundRow');
+      SEATS.forEach((slot, i) => {
+        const p = state.players[slot];
+        rows[i].querySelector('[data-who]').textContent =
+          `Seat ${i + 1}` + (p && p.name ? ` — ${p.name}` : '');
+        const custom = state.buzzerSounds && state.buzzerSounds[slot];
+        rows[i].querySelector('[data-which]').textContent = custom ? 'Custom sound' : 'Default buzzer';
+        rows[i].querySelector('[data-reset]').style.display = custom ? 'inline-block' : 'none';
+      });
+    }
 
     setInterval(refreshStatus, 1000);
     refreshStatus();

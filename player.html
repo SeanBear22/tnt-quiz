@@ -344,6 +344,130 @@
       min-height: 1em;
     }
   </style>
+  <style>
+    /* --- Buzzer ----------------------------------------------------------- */
+    #buzzArea {
+      display: none;
+      margin: 4px 0 12px 0;
+    }
+
+    #buzzButton {
+      display: block;
+      width: 210px;
+      height: 210px;
+      margin: 6px auto 14px auto;
+      border-radius: 50%;
+      border: 10px solid #2b2b3a;
+      background: radial-gradient(circle at 38% 32%, #ff6a6a 0%, #e01b1b 38%, #9e0c0c 78%, #6d0606 100%);
+      box-shadow: 0 10px 0 #4a0505, 0 14px 22px rgba(0, 0, 0, 0.55),
+                  inset 0 -8px 16px rgba(0, 0, 0, 0.35);
+      color: #ffffff;
+      font-family: Impact, 'Haettenschweiler', 'Arial Narrow Bold', sans-serif;
+      font-size: 2.2em;
+      letter-spacing: 0.04em;
+      text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.2s ease;
+      line-height: 1.05;
+      padding: 0 14px;
+    }
+
+    #buzzButton.open {
+      animation: buzzReady 1.4s ease-in-out infinite;
+    }
+
+    @keyframes buzzReady {
+      0%, 100% { border-color: #2b2b3a; }
+      50% { border-color: #ffd400; }
+    }
+
+    #buzzButton.pressed,
+    #buzzButton:active {
+      transform: translateY(8px);
+      box-shadow: 0 2px 0 #4a0505, 0 4px 10px rgba(0, 0, 0, 0.5),
+                  inset 0 -4px 10px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Won the buzz: a thick yellow ring, which reads clearly whatever your
+       colour vision. */
+    #buzzButton.mine {
+      border-color: #ffd400;
+      box-shadow: 0 10px 0 #4a0505, 0 0 0 6px rgba(255, 212, 0, 0.35), 0 0 40px rgba(255, 212, 0, 0.7);
+    }
+
+    #buzzButton.closed,
+    #buzzButton.taken,
+    #buzzButton.locked {
+      filter: grayscale(1) brightness(0.65);
+      cursor: default;
+      font-size: 1.5em;
+    }
+
+    #buzzButton.locked {
+      background: repeating-linear-gradient(45deg, #5a5a5a 0 14px, #444 14px 28px);
+    }
+
+    #buzzStatus {
+      font-weight: bold;
+      font-size: 1.1em;
+      color: #ffd400;
+      min-height: 1.3em;
+      margin-bottom: 10px;
+    }
+
+    #hotkeyRow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9em;
+      color: #cbd5e0;
+    }
+
+    #hotkeyRow kbd {
+      display: inline-block;
+      min-width: 1.6em;
+      padding: 3px 8px;
+      border: 1px solid #718096;
+      border-bottom-width: 3px;
+      border-radius: 5px;
+      background: #2d3748;
+      color: #ffffff;
+      font-family: inherit;
+      font-weight: bold;
+    }
+
+    #hotkeyRow button,
+    #hotkeyRow label {
+      font-size: 0.95em;
+    }
+
+    #hotkeyRow button {
+      padding: 4px 10px;
+      border: 0;
+      border-radius: 4px;
+      background: #2d3748;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+
+    #hotkeyFocus {
+      margin: 8px auto 0 auto;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.9em;
+      font-weight: bold;
+      cursor: pointer;
+      max-width: 320px;
+    }
+
+    #hotkeyFocus.ready { background: #1f3b2b; color: #b7f0c8; cursor: default; }
+    #hotkeyFocus.notReady { background: #ffd400; color: #1a1a2e; }
+  </style>
 </head>
 <body>
   <h1>TNT NERDS QUIZ</h1>
@@ -363,6 +487,16 @@
   <div id="answerArea" style="display:none;">
     <p id="scoreText">Score: 0</p>
     <p id="whoAmI"></p>
+    <div id="buzzArea">
+      <button id="buzzButton" type="button" class="closed">WAIT</button>
+      <div id="buzzStatus"></div>
+      <div id="hotkeyRow">
+        Hotkey: <kbd id="hotkeyName">Space</kbd>
+        <button id="hotkeyChange" type="button">Change</button>
+        <label><input type="checkbox" id="buzzSoundsInput" checked> Hear buzzes</label>
+      </div>
+      <div id="hotkeyFocus" class="ready"></div>
+    </div>
     <input type="text" id="answerInput" autocomplete="off" placeholder="Type your answer">
     <button id="lockButton">LOCK IN</button>
     <p id="statusText"></p>
@@ -391,6 +525,7 @@
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
   <script src="quiz-audio.js"></script>
+  <script src="buzzer.js"></script>
   <script>
     // Token issued by the server when this browser claims a slot. It proves
     // which player is submitting, so a slot cannot be answered for by anyone
@@ -571,7 +706,7 @@
           answersClosed = true;
           document.getElementById('answerInput').disabled = true;
           document.getElementById('lockButton').disabled = true;
-          statusText.textContent = 'Answers are closed';
+          statusText.textContent = buzzerRoundNow(state) ? '' : 'Answers are closed';
           statusText.className = '';
         } else if (!closedNow && answersClosed) {
           answersClosed = false;
@@ -597,6 +732,10 @@
 
         document.getElementById('scoreText').textContent = `Score: ${myInfo.score}`;
       }
+
+      TNTBuzzer.setSounds(state.buzzerSounds);
+      buzzWatch.feed(state.buzz);
+      renderBuzzer();
     }
 
     document.querySelectorAll('.slotBtn').forEach(btn => {
@@ -907,6 +1046,202 @@
       devicesNamed = false;
       mountSelfCamera(mySlot, id);
     });
+
+    // --- Buzzer ------------------------------------------------------------
+    // In a buzzer round the answer box is swapped for a big red button. The
+    // server decides who was first; this page only shows what it says.
+
+    function buzzerRoundNow(state) {
+      return !!(state && state.buzz && state.buzz.round);
+    }
+
+    const SOUNDS_KEY = 'tntQuizHearBuzzes';
+    const soundsInput = document.getElementById('buzzSoundsInput');
+    try { soundsInput.checked = localStorage.getItem(SOUNDS_KEY) !== 'off'; } catch (e) {}
+    soundsInput.addEventListener('change', () => {
+      try { localStorage.setItem(SOUNDS_KEY, soundsInput.checked ? 'on' : 'off'); } catch (e) {}
+    });
+
+    const buzzWatch = TNTBuzzer.createWatcher({
+      sound: false,
+      onBuzz: buzz => {
+        if (soundsInput.checked && buzz.holder) TNTBuzzer.play(buzz.holder);
+      },
+      onChange: () => renderBuzzer()
+    });
+
+    function nameOf(slot) {
+      const p = lastState && lastState.players[slot];
+      return (p && p.name) || 'Someone';
+    }
+
+    function renderBuzzer() {
+      const state = lastState;
+      const buzz = buzzWatch.latest;
+      const on = !!(mySlot && state && buzz && buzz.round);
+      const area = document.getElementById('buzzArea');
+      area.style.display = on ? 'block' : 'none';
+      document.getElementById('answerInput').style.display = on ? 'none' : '';
+      document.getElementById('lockButton').style.display = on ? 'none' : '';
+      if (!on) return;
+
+      const btn = document.getElementById('buzzButton');
+      const status = document.getElementById('buzzStatus');
+      const me = state.players[mySlot] || {};
+      let cls = 'closed';
+      let label = 'WAIT';
+      let text = '';
+
+      if (buzz.open) {
+        if (buzz.holder === mySlot) {
+          cls = 'mine'; label = "YOU'RE IN!"; text = 'Say your answer!';
+        } else if (buzz.lockedOut.includes(mySlot)) {
+          cls = 'locked'; label = 'LOCKED OUT';
+          text = "Wrong answer. You can buzz again once everyone else has had a go, or on the next question.";
+        } else if (buzz.holder) {
+          cls = 'taken'; label = nameOf(buzz.holder).toUpperCase() + '<br>BUZZED';
+          text = `${nameOf(buzz.holder)} got there first.`;
+        } else {
+          cls = 'open'; label = 'BUZZ!';
+          text = buzz.lockedOut.length
+            ? 'Buzzers open again. Go!'
+            : `Buzzers open. Worth ${buzz.points} point${buzz.points === 1 ? '' : 's'}.`;
+        }
+      } else if (state.phase === 'roundIntro') {
+        text = 'Buzzer round! Get ready.';
+      } else if (state.revealed) {
+        label = 'CLOSED';
+        if (me.correct === true) text = `Correct! +${buzz.points}`;
+        else if (buzz.holder && state.players[buzz.holder] && state.players[buzz.holder].correct === true) {
+          text = `${nameOf(buzz.holder)} got it.`;
+        } else text = 'Nobody got that one.';
+      }
+
+      if (buzzPending && cls === 'open') cls += ' pressed';
+      btn.className = cls;
+      btn.innerHTML = label.split('<br>').map(esc).join('<br>');
+      status.textContent = text;
+      renderHotkeyFocus();
+    }
+
+    let buzzPending = false;
+
+    async function pressBuzzer() {
+      const buzz = buzzWatch.latest;
+      if (!mySlot || !buzz || !buzz.round || buzzPending) return;
+      if (lastState && lastState.phase !== 'question') return;
+      buzzPending = true;
+      renderBuzzer();
+      try {
+        const response = await fetch('/api/buzz', {
+          method: 'POST',
+          headers: { 'X-Player-Token': myToken || '' }
+        });
+        const result = await response.json();
+        // Feeding the reply in straight away plays the sound and lights the
+        // button now, rather than on the next poll.
+        if (result.buzz) buzzWatch.feed(result.buzz);
+      } catch (err) {
+        document.getElementById('buzzStatus').textContent = "Couldn't reach the server. Try again.";
+      } finally {
+        buzzPending = false;
+        renderBuzzer();
+      }
+    }
+
+    // pointerdown rather than click: it fires the moment the button goes
+    // down, not when it is let go.
+    document.getElementById('buzzButton').addEventListener('pointerdown', event => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.preventDefault();
+      pressBuzzer();
+    });
+    // Space or Enter on the focused button would otherwise fire a click too.
+    document.getElementById('buzzButton').addEventListener('click', event => event.preventDefault());
+
+    // --- Hotkey ------------------------------------------------------------
+    // Stored per browser. The key only reaches this page while the quiz tab
+    // is the active window and the camera preview isn't selected, so the strip
+    // under the button says whether it will work right now.
+    const HOTKEY_KEY = 'tntQuizBuzzKey';
+    let hotkey = { code: 'Space', label: 'Space' };
+    try {
+      const saved = JSON.parse(localStorage.getItem(HOTKEY_KEY) || 'null');
+      if (saved && saved.code) hotkey = saved;
+    } catch (e) {}
+    let capturingHotkey = false;
+
+    function showHotkey() {
+      document.getElementById('hotkeyName').textContent = capturingHotkey ? 'Press a key…' : hotkey.label;
+      document.getElementById('hotkeyChange').textContent = capturingHotkey ? 'Cancel' : 'Change';
+    }
+    showHotkey();
+
+    function keyLabel(event) {
+      if (event.code === 'Space') return 'Space';
+      if (event.key && event.key.length === 1) return event.key.toUpperCase();
+      return event.key || event.code;
+    }
+
+    document.getElementById('hotkeyChange').addEventListener('click', event => {
+      capturingHotkey = !capturingHotkey;
+      showHotkey();
+      event.currentTarget.blur();
+    });
+
+    function typingInField(target) {
+      return target && (target.tagName === 'INPUT' && target.type === 'text'
+        || target.tagName === 'TEXTAREA' || target.isContentEditable);
+    }
+
+    document.addEventListener('keydown', event => {
+      if (capturingHotkey) {
+        event.preventDefault();
+        capturingHotkey = false;
+        if (event.key !== 'Escape') {
+          hotkey = { code: event.code, label: keyLabel(event) };
+          try { localStorage.setItem(HOTKEY_KEY, JSON.stringify(hotkey)); } catch (e) {}
+        }
+        showHotkey();
+        return;
+      }
+      if (event.code !== hotkey.code || event.repeat || typingInField(event.target)) return;
+      const buzz = buzzWatch.latest;
+      if (!mySlot || !buzz || !buzz.round) return;
+      event.preventDefault();   // stops Space scrolling the page
+      pressBuzzer();
+    }, true);
+
+    function hotkeyReady() {
+      const active = document.activeElement;
+      return document.hasFocus() && !(active && active.tagName === 'IFRAME');
+    }
+
+    function renderHotkeyFocus() {
+      const box = document.getElementById('hotkeyFocus');
+      if (hotkeyReady()) {
+        box.className = 'ready';
+        box.textContent = '\u2328 Hotkey ready';
+      } else {
+        box.className = 'notReady';
+        box.textContent = '\u2328 Hotkey off: click here to turn it back on';
+      }
+    }
+
+    // Clicking the strip puts the keyboard back on this page, including when
+    // the camera preview had taken it.
+    document.getElementById('hotkeyFocus').addEventListener('pointerdown', () => {
+      if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+        document.activeElement.blur();
+      }
+      window.focus();
+      setTimeout(renderHotkeyFocus, 0);
+    });
+    window.addEventListener('focus', renderHotkeyFocus);
+    window.addEventListener('blur', () => setTimeout(renderHotkeyFocus, 0));
+    setInterval(() => {
+      if (document.getElementById('buzzArea').style.display === 'block') renderHotkeyFocus();
+    }, 400);
 
     setInterval(refreshButtons, 1000);
     refreshButtons();

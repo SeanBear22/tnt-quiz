@@ -407,6 +407,70 @@
       font-size: 0.8em;
       vertical-align: 0.05em;
     }
+
+    /* --- Buzzers ---------------------------------------------------------
+       Whoever buzzed gets a flashing yellow glow and a BUZZ! badge; anyone
+       locked out goes grey with a LOCKED badge. Yellow and words, so it reads
+       the same for every kind of colour vision. */
+    .frameWrap.buzzed {
+      animation: buzzGlow 0.5s ease-in-out 4 alternate;
+      filter: drop-shadow(0 0 10px #ffd400) drop-shadow(0 0 22px rgba(255, 212, 0, 0.8));
+    }
+
+    @keyframes buzzGlow {
+      from { filter: drop-shadow(0 0 4px #ffd400) drop-shadow(0 0 8px rgba(255, 212, 0, 0.5)); }
+      to { filter: drop-shadow(0 0 16px #ffd400) drop-shadow(0 0 34px rgba(255, 212, 0, 1)); }
+    }
+
+    .frameWrap.lockedOut .camWindowOverlay {
+      filter: grayscale(1) brightness(0.55);
+    }
+
+    .buzzBadge {
+      position: absolute;
+      left: 50%;
+      top: 8%;
+      transform: translateX(-50%) rotate(-4deg);
+      z-index: 5;
+      padding: 2px 16px 0 16px;
+      border: 4px solid #000;
+      border-radius: 10px;
+      font-family: 'Bangers', 'Anton', Impact, sans-serif;
+      font-size: 2.6em;
+      letter-spacing: 2px;
+      line-height: 1.1;
+      white-space: nowrap;
+      display: none;
+      pointer-events: none;
+    }
+
+    .frameWrap.buzzed .buzzBadge {
+      display: block;
+      background: #ffd400;
+      color: #000;
+      animation: buzzPop 0.25s ease-out;
+    }
+
+    .frameWrap.lockedOut .buzzBadge {
+      display: block;
+      background: #2d2d2d;
+      color: #ffffff;
+      font-size: 1.8em;
+    }
+
+    @keyframes buzzPop {
+      from { transform: translateX(-50%) rotate(-4deg) scale(0.4); }
+      to { transform: translateX(-50%) rotate(-4deg) scale(1); }
+    }
+
+    .buzzRoundTag {
+      display: inline-block;
+      margin-top: 0.4em;
+      padding: 0 0.4em;
+      background: #ffd400;
+      color: #000;
+      font-size: 0.6em;
+    }
   </style>
 </head>
 <body>
@@ -480,6 +544,7 @@
   <script src="cam-local.js"></script>
   <script src="cam-config.js"></script>
   <script src="quiz-audio.js"></script>
+  <script src="buzzer.js"></script>
   <script>
     // Everything typed by a person (names, answers, questions, round titles)
     // goes through this before being placed in the page, so it is shown as
@@ -600,7 +665,9 @@
 
       if (state.gameStarted && state.showRoundIntro && state.currentRoundTitle) {
         setQuestionHtml(questionBox,
-          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}</div>` +
+          `<div class="qTextOnly">ROUND ${state.currentRoundIndex + 1}<br>${esc(state.currentRoundTitle)}` +
+          (state.buzz && state.buzz.round ? '<br><span class="buzzRoundTag">BUZZER ROUND</span>' : '') +
+          `</div>` +
           frameOverlayHtml);
       } else if (state.gameStarted && state.currentQuestion && state.answersShown) {
         setQuestionHtml(questionBox, buildAnswersHtml(players) + frameOverlayHtml);
@@ -700,6 +767,50 @@
           frameImg.src = 'player-frame-grey.png';
         }
       });
+
+      TNTBuzzer.setSounds(state.buzzerSounds);
+      buzzWatch.feed(state.buzz);
+      renderViewerBuzz();
+    }
+
+    // --- Buzzers ----------------------------------------------------------
+    // Polled quickly during buzzer rounds so the sound and glow land about a
+    // fifth of a second after the press. /viewer?noaudio stays silent.
+    const muted = location.search.indexOf('noaudio') !== -1;
+    const buzzWatch = TNTBuzzer.createWatcher({
+      viewer: true,
+      sound: !muted,
+      onChange: () => renderViewerBuzz()
+    });
+
+    let shownBuzzId = null;
+
+    function renderViewerBuzz() {
+      const buzz = buzzWatch.latest;
+      document.querySelectorAll('.playerSlot').forEach(el => {
+        const slot = el.dataset.slot;
+        const wrap = el.querySelector('.frameWrap');
+        let badge = wrap.querySelector('.buzzBadge');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.className = 'buzzBadge';
+          wrap.appendChild(badge);
+        }
+        const active = !!(buzz && buzz.round);
+        // The glow stays on the winner through the reveal; lockouts only
+        // matter while the buzzers are open.
+        const buzzed = active && buzz.holder === slot;
+        const locked = active && buzz.open && buzz.lockedOut.includes(slot);
+        // Restart the flash for a new buzz, even by the same player.
+        if (buzzed && buzz.buzzId !== shownBuzzId && wrap.classList.contains('buzzed')) {
+          wrap.classList.remove('buzzed');
+          void wrap.offsetWidth;
+        }
+        wrap.classList.toggle('buzzed', buzzed);
+        wrap.classList.toggle('lockedOut', locked && !buzzed);
+        badge.textContent = buzzed ? 'BUZZ!' : locked ? 'LOCKED' : '';
+      });
+      if (buzz) shownBuzzId = buzz.holder ? buzz.buzzId : shownBuzzId;
     }
 
     // Each frame's cutout holds the person's feed (an iframe) and their card.
